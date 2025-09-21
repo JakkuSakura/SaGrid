@@ -1,0 +1,3 @@
+[submodule "external/SolidAvalonia"]
+	path = external/SolidAvalonia
+	url = https://github.com/JakkuSakura/SolidAvalonia

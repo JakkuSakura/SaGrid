@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>SaGrid.Advanced</PackageId>
+    <PackageVersion>1.0.0</PackageVersion>
+    <Title>SaGrid - Advanced Data Grid</Title>
+    <Description>The most powerful data grid for .NET applications. Built on TanStack Table with advanced features like cell selection, filtering, sorting, virtualization, and export capabilities.</Description>
+    <Authors>SaGrid Team</Authors>
+    <PackageTags>sagrid;datagrid;table;advanced;filtering;sorting;selection;export;avalonia</PackageTags>
+    <RepositoryUrl>https://github.com/tanstack/table</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RootNamespace>SaGrid</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SaGrid.Core\SaGrid.Core.csproj" />
+    <ProjectReference Include="..\SaGrid.SolidAvalonia\SaGrid.SolidAvalonia.csproj" />
+    <ProjectReference Include="../external/SolidAvalonia/SolidAvalonia.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Markup.Declarative" Version="11.1.3" />
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

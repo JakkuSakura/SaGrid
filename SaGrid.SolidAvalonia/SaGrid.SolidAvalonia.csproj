@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>SaGrid.SolidAvalonia</PackageId>
+    <PackageVersion>1.0.0</PackageVersion>
+    <Title>SaGrid SolidAvalonia</Title>
+    <Description>SolidAvalonia adapter for SaGrid - reactive data grids for Avalonia applications</Description>
+    <Authors>SaGrid Team</Authors>
+    <PackageTags>table;datagrid;avalonia;solid;reactive;ui</PackageTags>
+    <RepositoryUrl>https://github.com/tanstack/table</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RootNamespace>SaGrid.SolidAvalonia</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SaGrid.Core\SaGrid.Core.csproj" />
+    <ProjectReference Include="../external/SolidAvalonia/SolidAvalonia.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Markup.Declarative" Version="11.1.3" />
+  </ItemGroup>
+
+</Project>

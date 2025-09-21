@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>SaGrid.Core</PackageId>
+    <PackageVersion>1.0.0</PackageVersion>
+    <Title>SaGrid Core</Title>
+    <Description>Headless table library for .NET - the core engine for building powerful data grids</Description>
+    <Authors>SaGrid Team</Authors>
+    <PackageTags>table;datagrid;headless;sorting;filtering;pagination</PackageTags>
+    <RepositoryUrl>https://github.com/tanstack/table</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RootNamespace>SaGrid.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Linq.Expressions" Version="4.3.0" />
+    <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
+  </ItemGroup>
+
+</Project>
