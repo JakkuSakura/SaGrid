@@ -6,6 +6,7 @@ using SolidAvalonia;
 using SaGrid.Core;
 using static SolidAvalonia.Solid;
 using Avalonia;
+using Avalonia.Input;
 
 namespace SaGrid;
 
@@ -66,7 +67,7 @@ internal class SaGridCellRenderer<TData>
             // Add click handler for cell selection
             border.PointerPressed += (sender, e) =>
             {
-                var isCtrlPressed = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control);
+                var isCtrlPressed = e.KeyModifiers.HasFlag(KeyModifiers.Control);
                 Console.WriteLine($"Cell clicked: Row {row.Index}, Column {column.Id}, Ctrl: {isCtrlPressed}");
                 
                 currentGrid?.SelectCell(row.Index, column.Id, isCtrlPressed);

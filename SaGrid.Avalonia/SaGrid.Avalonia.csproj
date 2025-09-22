@@ -6,21 +6,19 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageId>SaGrid.SolidAvalonia</PackageId>
+    <PackageId>SaGrid.Avalonia</PackageId>
     <PackageVersion>1.0.0</PackageVersion>
-    <Title>SaGrid SolidAvalonia</Title>
-    <Description>Reactive bindings for SaGrid Avalonia components using SolidAvalonia</Description>
+    <Title>SaGrid Avalonia UI</Title>
+    <Description>UI building blocks for SaGrid on Avalonia</Description>
     <Authors>SaGrid Team</Authors>
-    <PackageTags>table;datagrid;avalonia;solid;reactive</PackageTags>
+    <PackageTags>table;datagrid;avalonia;ui</PackageTags>
     <RepositoryUrl>https://github.com/tanstack/table</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RootNamespace>SaGrid.SolidAvalonia</RootNamespace>
+    <RootNamespace>SaGrid.Avalonia</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SaGrid.Core\SaGrid.Core.csproj" />
-    <ProjectReference Include="..\SaGrid.Avalonia\SaGrid.Avalonia.csproj" />
-    <ProjectReference Include="../external/SolidAvalonia/SolidAvalonia.csproj" />
   </ItemGroup>
 
   <ItemGroup>

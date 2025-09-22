@@ -1,6 +1,6 @@
 using SaGrid.Core;
 
-namespace SaGrid.SolidAvalonia;
+namespace SaGrid.Avalonia;
 
 internal static class TableContentHelper<TData>
 {

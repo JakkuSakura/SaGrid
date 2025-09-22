@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
+using Avalonia.Threading;
 using SaGrid.Core;
-using SaGrid.SolidAvalonia;
 
 namespace SaGrid;
 
@@ -498,7 +498,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     {
         try
         {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => _onUIUpdate?.Invoke());
+            Dispatcher.UIThread.Post(() => _onUIUpdate?.Invoke());
         }
         catch
         {

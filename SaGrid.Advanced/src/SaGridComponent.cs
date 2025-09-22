@@ -37,7 +37,7 @@ public class SaGridComponent<TData> : Component
         _saGrid = saGrid;
         
         // Initialize renderers
-        _headerRenderer = new SaGridHeaderRenderer<TData>(tb => _lastFocusedTextBox = tb);
+         _headerRenderer = new SaGridHeaderRenderer<TData>(tb => _lastFocusedTextBox = tb);
         _bodyRenderer = new SaGridBodyRenderer<TData>();
         _footerRenderer = new SaGridFooterRenderer<TData>();
         
@@ -94,15 +94,12 @@ public class SaGridComponent<TData> : Component
                     hdrPanel.Background = Brushes.White;
                 }
             }
-            Avalonia.Controls.Grid.SetRow(_headerControl, 0);
             _rootGrid.Children.Add(_headerControl);
 
             _bodyHost = new ContentControl();
-            Avalonia.Controls.Grid.SetRow(_bodyHost, 1);
             _rootGrid.Children.Add(_bodyHost);
 
             _footerHost = new ContentControl();
-            Avalonia.Controls.Grid.SetRow(_footerHost, 2);
             _rootGrid.Children.Add(_footerHost);
 
             _rootBorder = new Border()

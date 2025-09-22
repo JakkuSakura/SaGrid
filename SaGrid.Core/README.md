@@ -15,7 +15,7 @@ SaGrid Core is the headless table engine powering SaGrid, inspired by TanStack T
 - Column definitions with accessor functions
 - Basic sorting and filtering interfaces
 - Feature composition architecture
-- SolidAvalonia reactive adapter foundation
+- SolidAvalonia reactive adapter foundation + Avalonia UI scaffolding
 
 ### 🔄 Known Issues (To be resolved)
 - Record type inheritance compilation errors
@@ -27,7 +27,7 @@ SaGrid Core is the headless table engine powering SaGrid, inspired by TanStack T
 1. Fix compilation issues with state types
 2. Implement core row model generation
 3. Add sorting and filtering logic
-4. Complete SolidAvalonia reactive bindings
+4. Complete SolidAvalonia adapter integrations and Avalonia UI samples
 5. Add comprehensive examples
 
 ## Architecture Highlights
@@ -61,8 +61,8 @@ var table = TableBuilder.CreateTable(new TableOptions<Person>
     EnableFilters = true
 });
 
-// Use with SolidAvalonia
-var reactiveTable = SolidTableBuilder.CreateSortableTable(people, columns);
+// Use with SaGrid.SolidAvalonia for reactive Avalonia UI
+var reactiveTable = SaGrid.SolidAvalonia.SolidTableBuilder.CreateSortableTable(people, columns);
 ```
 
 This represents the foundational architecture for a production-ready table library. The core patterns and type system are established and ready for feature implementation.

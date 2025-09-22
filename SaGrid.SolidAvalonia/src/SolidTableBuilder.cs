@@ -1,14 +1,13 @@
+using Avalonia.Controls;
+using Avalonia.Markup.Declarative;
+using SaGrid.Avalonia;
 using SaGrid.Core;
 using static SolidAvalonia.Solid;
-using Avalonia.Markup.Declarative;
 
 namespace SaGrid.SolidAvalonia;
 
 public static class SolidTableBuilder
 {
-    /// <summary>
-    /// Creates a reactive SolidTable component
-    /// </summary>
     public static SolidTable<TData> CreateSolidTable<TData>(
         IEnumerable<TData> data,
         IReadOnlyList<ColumnDef<TData>> columns,
@@ -20,7 +19,6 @@ public static class SolidTableBuilder
             Columns = columns
         };
 
-        // Ensure data and columns are set
         tableOptions = tableOptions with
         {
             Data = data,
@@ -30,9 +28,6 @@ public static class SolidTableBuilder
         return new SolidTable<TData>(tableOptions);
     }
 
-    /// <summary>
-    /// Creates a reactive SolidTable component using an existing table instance
-    /// </summary>
     public static SolidTable<TData> CreateSolidTable<TData>(
         Table<TData> table,
         TableOptions<TData> options)
@@ -40,9 +35,6 @@ public static class SolidTableBuilder
         return new SolidTable<TData>(options, table);
     }
 
-    /// <summary>
-    /// Creates a reactive table with sorting enabled
-    /// </summary>
     public static SolidTable<TData> CreateSortableTable<TData>(
         IEnumerable<TData> data,
         IReadOnlyList<ColumnDef<TData>> columns,
@@ -60,9 +52,6 @@ public static class SolidTableBuilder
         return new SolidTable<TData>(options);
     }
 
-    /// <summary>
-    /// Creates a reactive table with filtering enabled
-    /// </summary>
     public static SolidTable<TData> CreateFilterableTable<TData>(
         IEnumerable<TData> data,
         IReadOnlyList<ColumnDef<TData>> columns,
@@ -80,9 +69,6 @@ public static class SolidTableBuilder
         return new SolidTable<TData>(options);
     }
 
-    /// <summary>
-    /// Creates a reactive table with pagination enabled
-    /// </summary>
     public static SolidTable<TData> CreatePaginatedTable<TData>(
         IEnumerable<TData> data,
         IReadOnlyList<ColumnDef<TData>> columns,
@@ -108,9 +94,6 @@ public static class SolidTableBuilder
         return new SolidTable<TData>(options);
     }
 
-    /// <summary>
-    /// Creates a reactive table with row selection enabled
-    /// </summary>
     public static SolidTable<TData> CreateSelectableTable<TData>(
         IEnumerable<TData> data,
         IReadOnlyList<ColumnDef<TData>> columns,
@@ -127,9 +110,6 @@ public static class SolidTableBuilder
         return new SolidTable<TData>(options);
     }
 
-    /// <summary>
-    /// Creates a fully featured reactive table
-    /// </summary>
     public static SolidTable<TData> CreateFullFeaturedTable<TData>(
         IEnumerable<TData> data,
         IReadOnlyList<ColumnDef<TData>> columns,
@@ -164,14 +144,8 @@ public static class SolidTableBuilder
     }
 }
 
-/// <summary>
-/// Column helper specifically for SolidAvalonia tables
-/// </summary>
 public static class SolidColumnHelper
 {
-    /// <summary>
-    /// Creates an accessor column with reactive cell content
-    /// </summary>
     public static ColumnDef<TData, TValue> ReactiveAccessor<TData, TValue>(
         string accessorKey,
         string? id = null,
@@ -190,9 +164,6 @@ public static class SolidColumnHelper
         };
     }
 
-    /// <summary>
-    /// Creates a display column that doesn't bind to data
-    /// </summary>
     public static ColumnDef<TData, object> ReactiveDisplay<TData>(
         string id,
         object? header = null,
@@ -203,30 +174,24 @@ public static class SolidColumnHelper
             Id = id,
             Header = header ?? id,
             Cell = cellRenderer != null
-                ? (object)new Func<Row<TData>, object>(cellRenderer)
+                ? (object)new Func<Row<TData>, object>(row => cellRenderer(row))
                 : null
         };
     }
 
-    /// <summary>
-    /// Creates an action column (e.g., for buttons)
-    /// </summary>
-    public static ColumnDef<TData, object> ActionColumn<TData>(
+    public static ColumnDef<TData, object> CommandButton<TData>(
         string id,
-        string buttonText,
-        Action<TData> onAction,
-        object? header = null)
+        string caption,
+        Action<Row<TData>> onClick)
     {
         return new ColumnDef<TData, object>
         {
             Id = id,
-            Header = header ?? id,
-            Cell = (object)new Func<Row<TData>, object>(row =>
-                Reactive(() => new Avalonia.Controls.Button()
-                    .Content(buttonText)
-                    .OnClick(_ => onAction(row.Original))
-                )
-            )
+            Header = caption,
+            Cell = new Func<Row<TData>, object>(row => Reactive(() =>
+                new Button()
+                    .Content(caption)
+                    .OnClick(_ => onClick(row))))
         };
     }
 }

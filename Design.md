@@ -6,9 +6,10 @@ SaGrid targets a strongly typed, headless table engine for .NET while AG Grid re
 ## SaGrid Snapshot (Current State)
 - Core engine (`SaGrid.Core/src/Models/Table.cs:6`) builds immutable column/row caches and applies a linear feature pipeline for filtering, sorting, grouping, expansion, and pagination.
 - Feature toggles live in `TableOptions<TData>` (`SaGrid.Core/src/Types.cs:13`) with optional delegates to replace row-model stages.
-- SolidAvalonia layer (`SaGrid.SolidAvalonia/src/SolidTable.cs:13`) wraps the headless table in reactive Avalonia components, handling state updates via signals.
+- Avalonia UI layer (`SaGrid.Avalonia/src/TableHeaderRenderer.cs:1`, `TableBodyRenderer.cs:1`) delivers non-reactive building blocks (header/body/footer renderers, cell helpers).
+- SolidAvalonia reactive layer (`SaGrid.SolidAvalonia/src/SolidTable.cs:1`) wraps those building blocks with Solid-style reactivity and helper builders.
 - Advanced layer (`SaGrid.Advanced/src/SaGrid.cs:8`, `SaGrid.Advanced/src/SaGridComponent.cs:15`) extends the base table with export helpers, keyboard navigation, and Avalonia-centric UX callbacks.
-- Repository structure is a focused .NET solution: `SaGrid.Core`, `SaGrid.SolidAvalonia`, `SaGrid.Advanced`, examples, and tests.
+- Repository structure is a focused .NET solution: `SaGrid.Core`, `SaGrid.Avalonia`, `SaGrid.Advanced`, examples, and tests.
 
 ## AG Grid Reference Architecture
 - Modular Nx monorepo with core (`packages/ag-grid-community`), enterprise (`packages/ag-grid-enterprise`), and official framework wrappers (`packages/ag-grid-react`, `ag-grid-angular`, `ag-grid-vue3`).
@@ -53,7 +54,7 @@ SaGrid targets a strongly typed, headless table engine for .NET while AG Grid re
   - Support undo/redo by leveraging immutable state snapshots combined with an event timeline.
 
 ### 5. UI Composition & Framework Reach
-- **Current SaGrid**: SolidAvalonia renders a single UI stack; advanced component couples strongly to Avalonia controls.
+- **Current SaGrid**: `SaGrid.Avalonia` offers non-reactive building blocks and `SaGrid.SolidAvalonia` adds Solid-powered reactivity; the advanced component builds on the reactive layer and still couples strongly to Avalonia.
 - **AG Grid Pattern**: UI is DOM-first, but wrappers for React/Angular/Vue exist as thin adapters over the vanilla grid.
 - **Borrowing Ideas**:
   - Factor the Avalonia renderers into a generic view-model interface so alternate UI layers (WPF, MAUI, Blazor) can follow the same contract.

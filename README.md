@@ -26,10 +26,18 @@ SaGrid/
 │   │   └── Types.cs         # Type definitions
 │   └── GlobalUsings.cs      # Global using statements
 │
-├── SaGrid.SolidAvalonia/     # 🎨 Reactive Avalonia components
+├── SaGrid.Avalonia/          # 🎨 Avalonia UI building blocks
 │   ├── src/
-│   │   ├── SolidTable*.cs   # SolidAvalonia reactive components
-│   │   └── Table*Renderer.cs # UI rendering components
+│   │   ├── Table*Renderer.cs # Header/body/footer renderers
+│   │   ├── TableCellRenderer.cs # Cell rendering helpers
+│   │   └── TableContentHelper.cs # Text/content utilities
+│   └── GlobalUsings.cs
+│
+├── SaGrid.SolidAvalonia/     # ⚡ SolidAvalonia reactive adapters
+│   ├── src/
+│   │   ├── SolidTable*.cs   # Reactive wrappers over Avalonia building blocks
+│   │   ├── SolidTableExtensions.cs # Solid-powered helpers
+│   │   └── SolidTableBuilder.cs # Factory convenience API
 │   └── GlobalUsings.cs
 │
 ├── SaGrid.Advanced/          # ⚡ Advanced features & components
@@ -54,7 +62,8 @@ SaGrid/
 | Package | Description | Status |
 |---------|-------------|---------|
 | **`SaGrid.Core`** | Headless table engine | ✅ Stable |
-| **`SaGrid.SolidAvalonia`** | Reactive Avalonia UI components | ✅ Stable |
+| **`SaGrid.Avalonia`** | Avalonia UI building blocks (non-reactive) | ✅ Stable |
+| **`SaGrid.SolidAvalonia`** | SolidAvalonia bindings for SaGrid.Avalonia | ✅ Stable |
 | **`SaGrid.Advanced`** | Advanced features & components | 🔄 In Progress |
 | **`Examples`** | Sample applications | 📚 Documentation |
 | **`Tests`** | Comprehensive test suite | 🧪 Testing |
@@ -74,11 +83,15 @@ SaGrid/
 - 🧠 **Memory optimized** with intelligent caching and weak references  
 
 ### 🎨 Avalonia Components (SaGrid.Avalonia)
-- 🔥 **Reactive signals** powered by SolidAvalonia architecture  
-- ⚡ **Auto re-rendering** when table state changes - no manual updates  
-- 🛠️ **Rich extensions** for common UI patterns and workflows  
-- 🎛️ **Pre-built controls** (sortable headers, filterable columns, pagination UI)  
-- 🎨 **Deep Avalonia integration** with declarative markup support  
+- 🧱 **Composable building blocks** (header/body/footer renderers, cell helpers)  
+- 🖌️ **Avalonia-first styling** with sensible defaults  
+- 🔄 **Manual refresh model** – integrate with MVVM or trigger redraws yourself  
+- 🧩 **Works standalone** or as the foundation for Solid-based adapters  
+
+### ⚡ Solid Reactive Layer (SaGrid.SolidAvalonia)
+- 🔁 **SolidAvalonia `Component` wrappers** for automatic state-driven updates  
+- 🧰 **Builders and extensions** mirroring TanStack's Solid adapter ergonomics  
+- 🤝 **Seamless pairing** with `SaGrid.Avalonia` primitives and `SaGrid.Advanced` features  
 - 🌈 **Themeable styling** with customizable appearance system
 
 ## ⚡ Quick Start - Get Running in 60 Seconds
@@ -110,28 +123,23 @@ var table = SaGrid.CreateTable(new TableOptions<Employee>
     EnableFiltering = true,
     EnablePagination = true
 });
-
-// Option B: Full-featured Avalonia table
-var avaloniaTable = SaGrid.CreateAvaloniaTable(
-    employees, 
-    columns,
-    pageSize: 25
-);
 ```
-
 ### 🎨 Step 4: Use in Your App
 
-#### Option A: With SolidAvalonia (Reactive)
+#### Option A: SolidAvalonia (Reactive UI)
 ```csharp
+using SaGrid.SolidAvalonia;
+
 public class EmployeeTableView : Component
 {
     protected override object Build()
     {
-        var table = SaGrid.CreateAvaloniaTable(data, columns);
-        
+        var table = SolidTableBuilder.CreateFullFeaturedTable(employees, columns);
+
         return new StackPanel()
             .Children(
-                table.SearchBox("Find employees..."),
+                table.GlobalFilterInput("Search employees..."),
+                table.ColumnVisibilityPanel(),
                 table,
                 table.PaginationControls()
             );
@@ -139,75 +147,60 @@ public class EmployeeTableView : Component
 }
 ```
 
-#### Option B: Regular Avalonia 
+#### Option B: Plain Avalonia building blocks
 ```csharp
-public partial class EmployeeWindow : Window
+using SaGrid.Avalonia;
+
+var table = new Table<Employee>(new TableOptions<Employee>
 {
-    public EmployeeWindow()
-    {
-        InitializeComponent();
-        
-        // Create headless table
-        var table = SaGrid.CreateTable(new TableOptions<Employee>
-        {
-            Data = GetEmployees(),
-            Columns = columns,
-            EnableSorting = true,
-            EnableFiltering = true
-        });
-        
-        // Bind to DataGrid
-        EmployeeDataGrid.ItemsSource = table.GetRowModel().Rows;
-        
-        // Listen to state changes for UI updates
-        table.OnStateChange = state =>
-        {
-            UpdateSortIndicators(state.Sorting);
-            UpdateFilterUI(state.ColumnFilters);
-            Dispatcher.UIThread.Post(() => EmployeeDataGrid.Items.Refresh());
-        };
-    }
-}
+    Data = employees,
+    Columns = columns,
+    EnableSorting = true,
+    EnableColumnFilters = true,
+    EnablePagination = true
+});
+
+var header = new TableHeaderRenderer<Employee>().CreateHeader(table);
+var body = new TableBodyRenderer<Employee>().CreateBody(table);
+var footer = new TableFooterRenderer<Employee>().CreateFooter(table);
+
+var layout = new StackPanel().Children(header, body, footer);
 ```
 
-> 💡 **That's it!** You now have a fully functional, reactive data grid with sorting, filtering, and pagination.
+> 💡 **Tip:** use the reactive Solid build when you want automatic updates; stick to the Avalonia building blocks when you prefer full control over redraw timing (e.g., MVVM).
 
 ## 🔥 Advanced Techniques
 
-### 🎛️ Custom Column Magic
+### 🎛️ Custom Column Helpers
 ```csharp
-// Action buttons that just work
-SaGrid.ActionColumn<Employee>("actions", "Actions", 
-    employee => HandleAction(employee.Id)),
+using SaGrid.SolidAvalonia;
 
-// Smart cell rendering
-SaGrid.ConditionalColumn<Employee, int>(
-    "salary", salary => salary >= 100000 ? "💰 Senior" : "💼 Regular"),
+var actionColumn = SolidColumnHelper.CommandButton<Employee>(
+    id: "actions",
+    caption: "Details",
+    onClick: row => ShowDetails(row.Original));
 
-// Dynamic status columns  
-SaGrid.StatusColumn<Employee>("status", "Status",
-    row => row.IsSelected ? "✅ Selected" : "⏳ Available")
+var reactiveColumn = SolidColumnHelper.ReactiveAccessor<Employee, string>(
+    accessorKey: "status",
+    header: "Status",
+    cellRenderer: status => status.ToUpperInvariant());
 ```
 
 ### 🎯 Powerful State Management
 ```csharp
-// React to every change
 var options = new TableOptions<Employee>
 {
     Data = employees,
     Columns = columns,
-    OnStateChange = state => 
+    OnStateChange = async state =>
     {
-        // Auto-save user preferences
-        Logger.Info($"Sorting by {state.Sorting?.Count} columns");
-        Logger.Info($"{state.ColumnFilters?.Count} filters active");
         await SaveUserPreferences(state);
     }
 };
 
 // Control everything programmatically
-table.SetSorting("salary", SortDirection.Desc);
-table.SetFilter("department", "Engineering");
+table.SetSorting("salary", SortDirection.Descending);
+table.SetColumnFilter("department", "Engineering");
 table.SetPageIndex(2);
 table.SetPageSize(50);
 ```
@@ -218,28 +211,24 @@ var smartColumn = new ColumnDef<Employee, string>
 {
     Id = "fullName",
     AccessorFn = e => $"{e.FirstName} {e.LastName}",
-    // Case-insensitive natural sorting
     SortingFn = (a, b) => string.Compare(a, b, StringComparison.OrdinalIgnoreCase),
-    // Fuzzy search that actually works
-    FilterFn = (row, columnId, filterValue) => 
-        row.GetValue<string>(columnId).Contains(filterValue.ToString(), 
-            StringComparison.OrdinalIgnoreCase)
+    FilterFn = (row, columnId, filterValue) =>
+        row.GetValue<string>(columnId)
+            .Contains(filterValue?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase)
 };
 ```
 
 ### 🎨 Reactive UI Extensions (SolidAvalonia)
 ```csharp
-// Headers that respond instantly
-table.SortableHeader(header, (columnId, direction) => 
-    Analytics.Track($"Column sorted: {columnId} {direction}"));
+var table = SolidTableBuilder.CreateSortableTable(employees, columns);
 
-// Smart filter inputs
-table.SmartFilterHeader(header, (columnId, value) => 
-    UserPrefs.SaveFilter(columnId, value));
+var headerControl = table.SortableHeader(headerDefinition,
+    (columnId, direction) => Analytics.Track($"Column sorted: {columnId} {direction}"));
 
-// Beautiful selectable rows
-table.SelectableRow(row, (rowId, selected) => 
-    SelectionChanged?.Invoke(rowId, selected));
+var filterHeader = table.FilterableHeader(headerDefinition,
+    (columnId, value) => UserPrefs.SaveFilter(columnId, value));
+
+var paginationControls = table.PaginationControls();
 ```
 
 ## 🏗️ Rock-Solid Architecture

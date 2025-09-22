@@ -6,5 +6,3 @@ global using Avalonia.Controls;
 global using Avalonia.Layout;
 global using Avalonia.Media;
 global using SaGrid.Core;
-global using SaGrid.Avalonia;
-global using SolidAvalonia;
