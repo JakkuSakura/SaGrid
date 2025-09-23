@@ -14,7 +14,7 @@
     <PackageTags>sagrid;datagrid;table;advanced;filtering;sorting;selection;export;avalonia</PackageTags>
     <RepositoryUrl>https://github.com/tanstack/table</RepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RootNamespace>SaGrid</RootNamespace>
+    <RootNamespace>SaGrid.Advanced</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

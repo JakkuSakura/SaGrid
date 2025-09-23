@@ -10,7 +10,6 @@ using System.Diagnostics;
 using Avalonia.Threading;
 using SaGrid.Advanced.Modules.SideBar;
 using System;
-using SaGrid.Modules.SideBar;
 
 namespace Examples;
 
@@ -24,6 +23,8 @@ public class MainWindow : Window
         InitializeComponent();
     }
 
+    private const string ColumnPanelId = "columnManager";
+
     private SaGrid<Person> saGrid = null!;
     private TextBlock infoTextBlock = null!;
     private Button _multiSortBtn = null!;
@@ -31,6 +32,7 @@ public class MainWindow : Window
     private Button _resetSortingBtn = null!;
     private Button _toggleSideBarBtn = null!;
     private Button _openColumnsPanelBtn = null!;
+    private SideBarService _sideBarService = null!;
 
     private void InitializeComponent()
     {
@@ -82,6 +84,8 @@ public class MainWindow : Window
         };
 
         saGrid = new SaGrid<Person>(options);
+        _sideBarService = saGrid.GetSideBarService();
+        _sideBarService.StateChanged += OnSideBarStateChanged;
 
         // Configure SaGrid.Advanced advanced features
         ConfigureSaGridFeatures();
@@ -94,6 +98,15 @@ public class MainWindow : Window
         
         // Update info display
         UpdateInfoText();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        if (_sideBarService != null)
+        {
+            _sideBarService.StateChanged -= OnSideBarStateChanged;
+        }
     }
 
     private IEnumerable<Person> GenerateLargeDataset(int count)
@@ -185,7 +198,7 @@ public class MainWindow : Window
 
         // Create SaGrid.Advanced host area with side bar + table
         var sideBarHost = new SideBarHost();
-        sideBarHost.Initialize(saGrid.GetSideBarService());
+        sideBarHost.Initialize(saGrid.GetSideBarService(), saGrid);
 
         var saGridComponent = new SaGridComponent<Person>(saGrid);
 
@@ -219,8 +232,6 @@ public class MainWindow : Window
         {
             Margin = new Thickness(0, 10, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
-            ItemHeight = 36,
-            ItemWidth = Double.NaN
         };
 
         _multiSortBtn = new Button 
@@ -299,13 +310,13 @@ public class MainWindow : Window
         };
         _openColumnsPanelBtn.Click += (sender, e) =>
         {
-            if (string.Equals(saGrid.GetOpenedToolPanel(), SideBarDefaultPanels.ColumnManagerId, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(saGrid.GetOpenedToolPanel(), ColumnPanelId, StringComparison.OrdinalIgnoreCase))
             {
                 saGrid.CloseToolPanel();
             }
             else
             {
-                saGrid.OpenToolPanel(SideBarDefaultPanels.ColumnManagerId);
+                saGrid.OpenToolPanel(ColumnPanelId);
                 saGrid.SetSideBarVisible(true);
             }
             UpdateControlButtons();
@@ -356,6 +367,20 @@ public class MainWindow : Window
         }
     }
 
+    private void OnSideBarStateChanged(object? sender, SideBarChangedEventArgs e)
+    {
+        if (!ReferenceEquals(e.Grid, saGrid))
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            UpdateInfoText();
+            UpdateControlButtons();
+        });
+    }
+
     private void UpdateControlButtons()
     {
         if (_multiSortBtn != null)
@@ -380,7 +405,7 @@ public class MainWindow : Window
         if (_openColumnsPanelBtn != null)
         {
             var opened = saGrid.GetOpenedToolPanel();
-            var isActive = string.Equals(opened, SideBarDefaultPanels.ColumnManagerId, StringComparison.OrdinalIgnoreCase);
+            var isActive = string.Equals(opened, ColumnPanelId, StringComparison.OrdinalIgnoreCase);
             _openColumnsPanelBtn.Content = isActive ? "📋 Close Columns Panel" : "📋 Open Columns Panel";
         }
     }

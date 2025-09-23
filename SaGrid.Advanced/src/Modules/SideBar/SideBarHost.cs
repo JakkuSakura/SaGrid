@@ -6,6 +6,7 @@ using Avalonia.Layout;
 using Avalonia.Threading;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
+using SaGrid;
 
 namespace SaGrid.Advanced.Modules.SideBar;
 
@@ -15,6 +16,12 @@ namespace SaGrid.Advanced.Modules.SideBar;
 public class SideBarHost : UserControl
 {
     private SideBarService? _service;
+    private object? _grid;
+    private Func<SideBarState>? _getState;
+    private Action<string>? _openPanel;
+    private Action? _closePanel;
+    private Func<string?>? _getActivePanelId;
+    private Func<Control?>? _getActivePanelControl;
     private readonly Grid _rootGrid;
     private readonly StackPanel _buttonPanel;
     private readonly ContentControl _panelHost;
@@ -37,7 +44,7 @@ public class SideBarHost : UserControl
         UpdateLayoutForPosition(SideBarPosition.Left);
     }
 
-    public void Initialize(SideBarService service)
+    public void Initialize<TData>(SideBarService service, SaGrid<TData> grid)
     {
         if (service == null) throw new ArgumentNullException(nameof(service));
 
@@ -47,13 +54,24 @@ public class SideBarHost : UserControl
         }
 
         _service = service;
+        _grid = grid;
+        _getState = () => service.GetState(grid);
+        _openPanel = panelId => service.OpenPanel(grid, panelId);
+        _closePanel = () => service.ClosePanel(grid);
+        _getActivePanelId = () => service.GetActivePanelId(grid);
+        _getActivePanelControl = () => service.GetActivePanelControl(grid);
         _service.StateChanged += OnServiceStateChanged;
 
-        SyncFromService(_service.GetState());
+        SyncFromService(_getState());
     }
 
     private void OnServiceStateChanged(object? sender, SideBarChangedEventArgs e)
     {
+        if (_grid == null || !ReferenceEquals(e.Grid, _grid))
+        {
+            return;
+        }
+
         void Apply() => SyncFromService(e.State);
 
         if (!Dispatcher.UIThread.CheckAccess())
@@ -68,14 +86,17 @@ public class SideBarHost : UserControl
 
     private void SyncFromService(SideBarState state)
     {
-        if (_service == null)
+        if (_service == null || _grid == null || _getState == null)
         {
             return;
         }
 
-        IsVisible = state.IsVisible;
+        IsEnabled = state.IsVisible;
+        IsHitTestVisible = state.IsVisible;
+        Opacity = state.IsVisible ? 1 : 0;
 
         UpdateLayoutForPosition(state.Position);
+        ApplyVisibility(state);
         BuildButtons(state);
         UpdateActivePanel();
     }
@@ -101,42 +122,44 @@ public class SideBarHost : UserControl
 
     private void OnPanelButtonClicked(object? sender, RoutedEventArgs e)
     {
-        if (_service == null)
+        if (_service == null || _grid == null)
         {
             return;
         }
 
         if (sender is ToggleButton button && button.Tag is string panelId)
         {
-            var isActive = string.Equals(_service.ActivePanelId, panelId, StringComparison.OrdinalIgnoreCase);
+            var activePanelId = _getActivePanelId?.Invoke();
+            var isActive = string.Equals(activePanelId, panelId, StringComparison.OrdinalIgnoreCase);
             if (isActive)
             {
-                _service.ClosePanel();
+                _closePanel?.Invoke();
             }
             else
             {
-                _service.OpenPanel(panelId);
+                _openPanel?.Invoke(panelId);
             }
         }
     }
 
     private void UpdateActivePanel()
     {
-        if (_service == null)
+        if (_service == null || _grid == null)
         {
             _panelHost.Content = null;
             return;
         }
 
-        var control = _service.GetActivePanelControl();
+        var control = _getActivePanelControl?.Invoke();
         _panelHost.Content = control;
 
         // Update button check states
+        var activePanelIdCurrent = _getActivePanelId?.Invoke();
         foreach (var child in _buttonPanel.Children.OfType<ToggleButton>())
         {
             if (child.Tag is string panelId)
             {
-                child.IsChecked = string.Equals(_service.ActivePanelId, panelId, StringComparison.OrdinalIgnoreCase);
+                child.IsChecked = string.Equals(activePanelIdCurrent, panelId, StringComparison.OrdinalIgnoreCase);
             }
         }
     }
@@ -164,6 +187,25 @@ public class SideBarHost : UserControl
             Grid.SetColumn(_buttonPanel, 1);
 
             _buttonPanel.Margin = new Thickness(8, 0, 0, 0);
+        }
+    }
+
+    private void ApplyVisibility(SideBarState state)
+    {
+        if (_rootGrid?.ColumnDefinitions.Count != 2)
+        {
+            return;
+        }
+
+        if (state.Position == SideBarPosition.Left)
+        {
+            _rootGrid.ColumnDefinitions[0].Width = state.IsVisible ? GridLength.Auto : new GridLength(0);
+            _rootGrid.ColumnDefinitions[1].Width = new GridLength(1, GridUnitType.Star);
+        }
+        else
+        {
+            _rootGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+            _rootGrid.ColumnDefinitions[1].Width = state.IsVisible ? GridLength.Auto : new GridLength(0);
         }
     }
 }

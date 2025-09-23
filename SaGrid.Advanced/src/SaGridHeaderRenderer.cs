@@ -6,21 +6,26 @@ using SaGrid.Core;
 using Avalonia;
 using Avalonia.Input;
 using static SolidAvalonia.Solid;
+using System.Linq;
 
 namespace SaGrid;
 
 internal class SaGridHeaderRenderer<TData>
 {
   private readonly Action<TextBox>? _onFilterFocus;
+  private readonly Action<string, TextBox>? _onFilterTextBoxCreated;
 
-  public SaGridHeaderRenderer(Action<TextBox>? onFilterFocus = null)
+  public SaGridHeaderRenderer(Action<TextBox>? onFilterFocus = null, Action<string, TextBox>? onFilterTextBoxCreated = null)
   {
     _onFilterFocus = onFilterFocus;
+    _onFilterTextBoxCreated = onFilterTextBoxCreated;
   }
 
   public Control CreateHeader(SaGrid<TData> saGrid, Func<SaGrid<TData>>? gridSignalGetter = null,
     Func<int>? selectionSignalGetter = null)
   {
+    _ = gridSignalGetter;
+    _ = selectionSignalGetter;
     var headerControls = new List<Control>();
 
     // Add header title rows with sortable headers
@@ -57,46 +62,7 @@ internal class SaGridHeaderRenderer<TData>
               Cursor = new Cursor(StandardCursorType.Hand)
             };
 
-            // Reactive header label with sort indicators
-            var label = Reactive(() =>
-            {
-              var _ = gridSignalGetter?.Invoke();
-              var __ = selectionSignalGetter?.Invoke();
-              var title = SaGridContentHelper<TData>.GetHeaderContent(header);
-              string sortSuffix = "";
-              if (column.SortDirection != null)
-              {
-                var arrow = column.SortDirection == SaGrid.Core.SortDirection.Ascending ? "▲" : "▼";
-                // Only show index when multi-sort is enabled (runtime toggle aware)
-                var isMulti = saGrid is SaGrid<TData> g && g.IsMultiSortEnabled();
-                var index = (isMulti && column.SortIndex.HasValue)
-                  ? $" {column.SortIndex.Value + 1}"
-                  : string.Empty;
-                sortSuffix = $" {arrow}{index}";
-              }
-
-              var container = new Grid
-              {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch
-              };
-              var centeredTitle = new TextBlock()
-                .Text(title)
-                .HorizontalAlignment(HorizontalAlignment.Center)
-                .VerticalAlignment(VerticalAlignment.Center)
-                .TextAlignment(TextAlignment.Center)
-                .FontWeight(FontWeight.Bold);
-              var rightIndicator = new TextBlock()
-                .Text(sortSuffix)
-                .HorizontalAlignment(HorizontalAlignment.Right)
-                .VerticalAlignment(VerticalAlignment.Center)
-                .Margin(new Thickness(8, 0, 8, 0));
-              container.Children.Add(centeredTitle);
-              container.Children.Add(rightIndicator);
-              return container;
-            });
-
-            button.Content = label;
+            button.Content = CreateHeaderLabel(saGrid, column, header);
 
             // Unified sorting handler: plain click = single-sort cycle (replace others);
             // with modifier and multi-sort enabled = append/switch/remove in chain.
@@ -268,6 +234,8 @@ internal class SaGridHeaderRenderer<TData>
       AcceptsReturn = false,
       AcceptsTab = false
     };
+    textBox.Tag = column.Id;
+    _onFilterTextBoxCreated?.Invoke(column.Id, textBox);
     textBox.Margin = new Thickness(4, 4, 4, 4);
     textBox.BorderThickness = new Thickness(1);
     textBox.BorderBrush = Brushes.Gray;
@@ -347,5 +315,45 @@ internal class SaGridHeaderRenderer<TData>
     }
 
     return textBox;
+  }
+
+  private Control CreateHeaderLabel(SaGrid<TData> saGrid, Column<TData> column, IHeader<TData> header)
+  {
+    var title = SaGridContentHelper<TData>.GetHeaderContent(header);
+    var sortSuffix = string.Empty;
+
+    if (column.SortDirection != null)
+    {
+      var arrow = column.SortDirection == SaGrid.Core.SortDirection.Ascending ? "▲" : "▼";
+      var isMulti = saGrid.IsMultiSortEnabled();
+      var index = (isMulti && column.SortIndex.HasValue)
+        ? $" {column.SortIndex.Value + 1}"
+        : string.Empty;
+      sortSuffix = $" {arrow}{index}";
+    }
+
+    var container = new Grid
+    {
+      HorizontalAlignment = HorizontalAlignment.Stretch,
+      VerticalAlignment = VerticalAlignment.Stretch
+    };
+
+    var centeredTitle = new TextBlock()
+      .Text(title)
+      .HorizontalAlignment(HorizontalAlignment.Center)
+      .VerticalAlignment(VerticalAlignment.Center)
+      .TextAlignment(TextAlignment.Center)
+      .FontWeight(FontWeight.Bold);
+
+    var rightIndicator = new TextBlock()
+      .Text(sortSuffix)
+      .HorizontalAlignment(HorizontalAlignment.Right)
+      .VerticalAlignment(VerticalAlignment.Center)
+      .Margin(new Thickness(8, 0, 8, 0));
+
+    container.Children.Add(centeredTitle);
+    container.Children.Add(rightIndicator);
+
+    return container;
   }
 }

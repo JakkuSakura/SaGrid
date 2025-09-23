@@ -2,55 +2,57 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Avalonia.Controls;
+using SaGrid;
 
 namespace SaGrid.Advanced.Modules.SideBar;
 
 /// <summary>
 /// Manages side bar state, registered tool panels, and placement. Mirrors AG Grid's side bar service pattern.
+/// Stores independent state per SaGrid instance.
 /// </summary>
 public class SideBarService
 {
-    private readonly Dictionary<string, SideBarPanelDefinition> _panelDefinitions = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, Control> _panelCache = new(StringComparer.OrdinalIgnoreCase);
-    private bool _visible = true;
-    private string? _activePanelId;
-    private SideBarPosition _position = SideBarPosition.Left;
+    private sealed class SideBarInstance
+    {
+        public bool Visible = true;
+        public string? ActivePanelId;
+        public SideBarPosition Position = SideBarPosition.Left;
+        public List<SideBarPanelDefinition> PanelList = new();
+        public Dictionary<string, SideBarPanelDefinition> PanelDefinitions = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, Control> PanelCache = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private readonly ConditionalWeakTable<object, SideBarInstance> _instances = new();
 
     public event EventHandler<SideBarChangedEventArgs>? StateChanged;
 
-    public bool IsVisible => _visible;
-
-    public string? ActivePanelId => _activePanelId;
-
-    public SideBarPosition Position => _position;
-
-    public IReadOnlyList<SideBarPanelDefinition> GetPanels()
+    public IReadOnlyList<SideBarPanelDefinition> GetPanels<TData>(SaGrid<TData> grid)
     {
-        return new ReadOnlyCollection<SideBarPanelDefinition>(_panelDefinitions.Values.ToList());
+        var instance = GetOrCreateInstance(grid);
+        return new ReadOnlyCollection<SideBarPanelDefinition>(instance.PanelList.ToList());
     }
 
-    public void SetPanels(IEnumerable<SideBarPanelDefinition> definitions)
+    public void SetPanels<TData>(SaGrid<TData> grid, IEnumerable<SideBarPanelDefinition> definitions)
     {
         if (definitions == null) throw new ArgumentNullException(nameof(definitions));
 
-        _panelDefinitions.Clear();
-        _panelCache.Clear();
+        var instance = GetOrCreateInstance(grid);
+        var definitionList = definitions.ToList();
+        instance.PanelList = definitionList;
+        instance.PanelDefinitions = definitionList.ToDictionary(d => d.Id, StringComparer.OrdinalIgnoreCase);
+        instance.PanelCache.Clear();
 
-        foreach (var definition in definitions)
+        if (instance.ActivePanelId != null && !instance.PanelDefinitions.ContainsKey(instance.ActivePanelId))
         {
-            RegisterPanel(definition);
+            instance.ActivePanelId = null;
         }
 
-        if (_activePanelId != null && !_panelDefinitions.ContainsKey(_activePanelId))
-        {
-            _activePanelId = null;
-        }
-
-        NotifyStateChanged(SideBarChangeKind.PanelsChanged);
+        NotifyStateChanged(grid, SideBarChangeKind.PanelsChanged);
     }
 
-    public void RegisterPanel(SideBarPanelDefinition definition)
+    public void RegisterPanel<TData>(SaGrid<TData> grid, SideBarPanelDefinition definition)
     {
         if (definition == null) throw new ArgumentNullException(nameof(definition));
         if (string.IsNullOrWhiteSpace(definition.Id))
@@ -58,99 +60,147 @@ public class SideBarService
             throw new InvalidOperationException("Side bar panels require a valid Id.");
         }
 
-        _panelDefinitions[definition.Id] = definition;
-        NotifyStateChanged(SideBarChangeKind.PanelsChanged);
+        var instance = GetOrCreateInstance(grid);
+        instance.PanelDefinitions[definition.Id] = definition;
+        instance.PanelList.RemoveAll(p => string.Equals(p.Id, definition.Id, StringComparison.OrdinalIgnoreCase));
+        instance.PanelList.Add(definition);
+        instance.PanelCache.Remove(definition.Id);
+        NotifyStateChanged(grid, SideBarChangeKind.PanelsChanged);
     }
 
-    public bool IsPanelRegistered(string panelId) => _panelDefinitions.ContainsKey(panelId);
-
-    public void OpenPanel(string panelId)
+    public bool IsPanelRegistered<TData>(SaGrid<TData> grid, string panelId)
     {
-        if (!_panelDefinitions.ContainsKey(panelId))
+        var instance = GetOrCreateInstance(grid);
+        return instance.PanelDefinitions.ContainsKey(panelId);
+    }
+
+    public void OpenPanel<TData>(SaGrid<TData> grid, string panelId)
+    {
+        var instance = GetOrCreateInstance(grid);
+        if (!instance.PanelDefinitions.ContainsKey(panelId))
         {
             throw new InvalidOperationException($"Side bar panel '{panelId}' is not registered.");
         }
 
-        var changed = _activePanelId != panelId;
-        _activePanelId = panelId;
-        if (!_visible)
+        var changed = instance.ActivePanelId != panelId;
+        instance.ActivePanelId = panelId;
+        if (!instance.Visible)
         {
-            _visible = true;
+            instance.Visible = true;
             changed = true;
         }
 
         if (changed)
         {
-            NotifyStateChanged(SideBarChangeKind.ActivePanelChanged);
+            NotifyStateChanged(grid, SideBarChangeKind.ActivePanelChanged);
         }
     }
 
-    public void ClosePanel()
+    public void ClosePanel<TData>(SaGrid<TData> grid)
     {
-        if (_activePanelId != null)
+        var instance = GetOrCreateInstance(grid);
+        if (instance.ActivePanelId != null)
         {
-            _activePanelId = null;
-            NotifyStateChanged(SideBarChangeKind.ActivePanelChanged);
+            instance.ActivePanelId = null;
+            NotifyStateChanged(grid, SideBarChangeKind.ActivePanelChanged);
         }
     }
 
-    public void SetVisible(bool visible)
+    public void SetVisible<TData>(SaGrid<TData> grid, bool visible)
     {
-        if (_visible == visible)
+        var instance = GetOrCreateInstance(grid);
+        if (instance.Visible == visible)
         {
             return;
         }
 
-        _visible = visible;
+        instance.Visible = visible;
         if (!visible)
         {
-            _activePanelId = null;
+            instance.ActivePanelId = null;
         }
 
-        NotifyStateChanged(SideBarChangeKind.VisibilityChanged);
+        NotifyStateChanged(grid, SideBarChangeKind.VisibilityChanged);
     }
 
-    public void ToggleVisible()
+    public void ToggleVisible<TData>(SaGrid<TData> grid)
     {
-        SetVisible(!_visible);
+        var instance = GetOrCreateInstance(grid);
+        SetVisible(grid, !instance.Visible);
     }
 
-    public void SetPosition(SideBarPosition position)
+    public bool IsVisible<TData>(SaGrid<TData> grid)
     {
-        if (_position == position)
+        var instance = GetOrCreateInstance(grid);
+        return instance.Visible;
+    }
+
+    public void SetPosition<TData>(SaGrid<TData> grid, SideBarPosition position)
+    {
+        var instance = GetOrCreateInstance(grid);
+        if (instance.Position == position)
         {
             return;
         }
 
-        _position = position;
-        NotifyStateChanged(SideBarChangeKind.PositionChanged);
+        instance.Position = position;
+        NotifyStateChanged(grid, SideBarChangeKind.PositionChanged);
     }
 
-    public Control? GetActivePanelControl()
+    public SideBarPosition GetPosition<TData>(SaGrid<TData> grid)
     {
-        if (_activePanelId == null)
+        var instance = GetOrCreateInstance(grid);
+        return instance.Position;
+    }
+
+    public Control? GetActivePanelControl<TData>(SaGrid<TData> grid)
+    {
+        var instance = GetOrCreateInstance(grid);
+        if (instance.ActivePanelId == null)
         {
             return null;
         }
 
-        if (!_panelCache.TryGetValue(_activePanelId, out var control))
+        if (!instance.PanelCache.TryGetValue(instance.ActivePanelId, out var control))
         {
-            var definition = _panelDefinitions[_activePanelId];
+            var definition = instance.PanelDefinitions[instance.ActivePanelId];
             control = definition.ContentFactory();
-            _panelCache[_activePanelId] = control;
+            instance.PanelCache[instance.ActivePanelId] = control;
         }
 
         return control;
     }
 
-    public SideBarState GetState()
+    public SideBarState GetState<TData>(SaGrid<TData> grid)
     {
-        return new SideBarState(_visible, _position, GetPanels(), _activePanelId);
+        var instance = GetOrCreateInstance(grid);
+        return new SideBarState(instance.Visible, instance.Position, GetPanels(grid), instance.ActivePanelId);
     }
 
-    private void NotifyStateChanged(SideBarChangeKind changeKind)
+    public string? GetActivePanelId<TData>(SaGrid<TData> grid)
     {
-        StateChanged?.Invoke(this, new SideBarChangedEventArgs(GetState(), changeKind));
+        var instance = GetOrCreateInstance(grid);
+        return instance.ActivePanelId;
+    }
+
+    public void EnsureDefaultPanels<TData>(SaGrid<TData> grid)
+    {
+        var instance = GetOrCreateInstance(grid);
+        if (instance.PanelDefinitions.Count == 0)
+        {
+        SetPanels(grid, SideBarDefaultPanels.CreateDefaultPanels(grid));
+        }
+    }
+
+    private SideBarInstance GetOrCreateInstance(object grid)
+    {
+        return _instances.GetValue(grid, _ => new SideBarInstance());
+    }
+
+    private void NotifyStateChanged<TData>(SaGrid<TData> grid, SideBarChangeKind changeKind)
+    {
+        var state = GetState(grid);
+        StateChanged?.Invoke(this, new SideBarChangedEventArgs(grid, state, changeKind));
     }
 }
 
@@ -174,11 +224,14 @@ public enum SideBarChangeKind
 
 public sealed class SideBarChangedEventArgs : EventArgs
 {
-    public SideBarChangedEventArgs(SideBarState state, SideBarChangeKind change)
+    public SideBarChangedEventArgs(object grid, SideBarState state, SideBarChangeKind change)
     {
+        Grid = grid;
         State = state;
         Change = change;
     }
+
+    public object Grid { get; }
 
     public SideBarState State { get; }
 

@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Avalonia.Threading;
 using SaGrid.Core;
 using SaGrid.Advanced.Modules;
@@ -27,6 +29,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _cellSelectionService = context.Resolve<CellSelectionService>();
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
         _sideBarService = context.Resolve<SideBarService>();
+        _sideBarService.EnsureDefaultPanels(this);
     }
 
     // Constructor for test compatibility  
@@ -38,6 +41,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _cellSelectionService = context.Resolve<CellSelectionService>();
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
         _sideBarService = context.Resolve<SideBarService>();
+        _sideBarService.EnsureDefaultPanels(this);
     }
 
     // Advanced filtering capabilities
@@ -100,7 +104,8 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     // Advanced column operations
     public new void SetColumnVisibility(string columnId, bool visible)
     {
-        this.ToggleColumnVisibility(columnId, visible); // Use extension method from base
+        base.SetColumnVisibility(columnId, visible);
+        ScheduleUIUpdate();
     }
 
     public new bool GetColumnVisibility(string columnId)
@@ -127,25 +132,25 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     // Side bar APIs
     public SideBarService GetSideBarService() => _sideBarService;
 
-    public IReadOnlyList<SideBarPanelDefinition> GetSideBarPanels() => _sideBarService.GetPanels();
+    public IReadOnlyList<SideBarPanelDefinition> GetSideBarPanels() => _sideBarService.GetPanels(this);
 
-    public void SetSideBarPanels(IEnumerable<SideBarPanelDefinition> panels) => _sideBarService.SetPanels(panels);
+    public void SetSideBarPanels(IEnumerable<SideBarPanelDefinition> panels) => _sideBarService.SetPanels(this, panels);
 
-    public bool IsSideBarVisible() => _sideBarService.IsVisible;
+    public bool IsSideBarVisible() => _sideBarService.IsVisible(this);
 
-    public void SetSideBarVisible(bool visible) => _sideBarService.SetVisible(visible);
+    public void SetSideBarVisible(bool visible) => _sideBarService.SetVisible(this, visible);
 
-    public void ToggleSideBarVisible() => _sideBarService.ToggleVisible();
+    public void ToggleSideBarVisible() => _sideBarService.ToggleVisible(this);
 
-    public void OpenToolPanel(string panelId) => _sideBarService.OpenPanel(panelId);
+    public void OpenToolPanel(string panelId) => _sideBarService.OpenPanel(this, panelId);
 
-    public void CloseToolPanel() => _sideBarService.ClosePanel();
+    public void CloseToolPanel() => _sideBarService.ClosePanel(this);
 
-    public string? GetOpenedToolPanel() => _sideBarService.ActivePanelId;
+    public string? GetOpenedToolPanel() => _sideBarService.GetActivePanelId(this);
 
-    public SideBarPosition GetSideBarPosition() => _sideBarService.Position;
+    public SideBarPosition GetSideBarPosition() => _sideBarService.GetPosition(this);
 
-    public void SetSideBarPosition(SideBarPosition position) => _sideBarService.SetPosition(position);
+    public void SetSideBarPosition(SideBarPosition position) => _sideBarService.SetPosition(this, position);
 
     public bool IsMultiSortEnabled()
     {
