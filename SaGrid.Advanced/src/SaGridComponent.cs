@@ -10,6 +10,8 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 
+using GridControl = Avalonia.Controls.Grid;
+
 namespace SaGrid;
 
 public class SaGridComponent<TData> : Component
@@ -70,7 +72,7 @@ public class SaGridComponent<TData> : Component
         // Build the root container once to avoid reparenting and keep header TextBoxes stable
         if (_rootGrid == null)
         {
-            _rootGrid = new Grid
+            _rootGrid = new GridControl
             {
                 RowDefinitions = new RowDefinitions("Auto,*,Auto")
             };
@@ -94,12 +96,15 @@ public class SaGridComponent<TData> : Component
                     hdrPanel.Background = Brushes.White;
                 }
             }
+            GridControl.SetRow(_headerControl, 0);
             _rootGrid.Children.Add(_headerControl);
 
             _bodyHost = new ContentControl();
+            GridControl.SetRow(_bodyHost, 1);
             _rootGrid.Children.Add(_bodyHost);
 
             _footerHost = new ContentControl();
+            GridControl.SetRow(_footerHost, 2);
             _rootGrid.Children.Add(_footerHost);
 
             _rootBorder = new Border()

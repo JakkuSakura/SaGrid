@@ -14,11 +14,13 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
 
     public SaGrid(TableOptions<TData> options) : base(options)
     {
+        SaGridModules.EnsureInitialized();
     }
 
     // Constructor for test compatibility  
     public SaGrid(Table<TData> table) : base(table.Options)
     {
+        SaGridModules.EnsureInitialized();
     }
 
     // Advanced filtering capabilities

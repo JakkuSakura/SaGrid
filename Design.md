@@ -11,6 +11,7 @@ SaGrid targets a strongly typed, headless table engine for .NET while AG Grid re
 - Advanced layer (`SaGrid.Advanced/src/SaGrid.cs:8`, `SaGrid.Advanced/src/SaGridComponent.cs:15`) extends the base table with export helpers, keyboard navigation, and Avalonia-centric UX callbacks.
 - Repository structure is a focused .NET solution: `SaGrid.Core`, `SaGrid.Avalonia`, `SaGrid.Advanced`, examples, and tests.
 
+
 ## AG Grid Reference Architecture
 - Modular Nx monorepo with core (`packages/ag-grid-community`), enterprise (`packages/ag-grid-enterprise`), and official framework wrappers (`packages/ag-grid-react`, `ag-grid-angular`, `ag-grid-vue3`).
 - Dependency-injected "bean" system orchestrated by `GridCoreCreator` (`packages/ag-grid-community/src/grid.ts:1`) and `AgContext` (`packages/ag-grid-community/src/context/context.ts:1`).
@@ -92,6 +93,33 @@ SaGrid targets a strongly typed, headless table engine for .NET while AG Grid re
   - Create structured docs (concepts, API, tutorials) and host interactive samples akin to AG Grid’s documentation portal.
   - Maintain a roadmap highlighting enterprise feature parity goals to guide contributors.
   - Provide upgrade guides when breaking API changes occur, borrowing AG Grid’s release cadence playbook.
+
+## SaGrid.Advanced Borrowing Plan (from AG Grid)
+1. **Modular Feature Surface**
+   - Mirror AG Grid's enterprise module registry by grouping premium SaGrid.Advanced capabilities (row grouping, pivoting, rich side panels) into opt-in packages.
+   - Define clear module contracts (dependencies, exposed services) so hosts can cherry-pick features similar to AG Grid's `RowGroupingModule`, `SideBarModule`, etc.
+2. **Tool Panels & Side Bar**
+   - Introduce a configurable side bar service that renders column manager, filters, and custom panels; follow AG Grid's `SideBarService` pattern to register panels and expose API functions (`OpenPanel`, `RefreshPanel`).
+   - Build Avalonia counterparts to AG Grid's column drop zones/header panels for drag-and-drop grouping and pivot configuration.
+3. **Row Grouping, Pivoting, Aggregation**
+   - Port grouping pipeline into SaGrid.Advanced: reusable services for group strategies, aggregation functions, and group-aware filters.
+   - Provide UI (chips/drop zones) and APIs (`SetRowGroupColumns`, `MoveRowGroupColumn`) inspired by AG Grid's grouping API.
+4. **Advanced Filtering & Editors**
+   - Implement multi-filter compositions, set filters, and quick filter services similar to AG Grid's enterprise filters.
+   - Add rich cell editors (combo boxes, date pickers, sliders) and batch editing flows.
+5. **Analytics & Visualization**
+   - Borrow AG Grid's chart integration concepts: export table slices into chart-friendly models, embed Avalonia charts triggered from context menus.
+   - Extend export tooling (CSV, Excel, clipboard) with asynchronous services.
+6. **Row Models & Virtualization**
+   - Offer multiple row models (client-side, viewport/server-side) patterned after AG Grid's row-model contracts.
+   - Integrate virtualization hooks so UI components can lazily render rows with large datasets.
+7. **Status Bar & Widgets**
+   - Provide a status bar framework for summary widgets (row counts, selection totals) similar to AG Grid's widgets.
+   - Support custom widget injection via registration.
+8. **API Surface & Events**
+   - Design an advanced API layer that surfaces module-specific operations (visibility, grouping, context actions) echoing AG Grid's grid API.
+   - Publish granular events so hosts can react to module state changes without diffing entire table state.
+
 
 ## Next Steps
 1. Prototype a module registry for SaGrid features and evaluate integration with existing `ITableFeature<TData>` implementations.
