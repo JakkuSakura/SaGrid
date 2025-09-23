@@ -3,11 +3,15 @@ using System.Collections.Generic;
 using Avalonia.Threading;
 using SaGrid.Core;
 using SaGrid.Advanced.Context;
+using SaGrid.Advanced.Events;
+using SaGrid.Advanced.Interfaces;
 using SaGrid.Advanced.Modules.SideBar;
 using SaGrid.Advanced.Modules.StatusBar;
 using SaGrid.Advanced.Modules.Export;
+using SaGrid.Advanced.RowModel;
 using SaGrid.Advanced.Selection;
 using SaGrid.Advanced.Modules.Sorting;
+using SaGrid.Advanced.Interactive;
 
 namespace SaGrid;
 
@@ -22,6 +26,9 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     private readonly SortingEnhancementsService _sortingEnhancementsService;
     private readonly SideBarService _sideBarService;
     private readonly StatusBarService _statusBarService;
+    private readonly IEventService _eventService;
+    private readonly IClientSideRowModel<TData> _clientSideRowModel;
+    private readonly ColumnInteractiveService<TData> _columnInteractiveService;
 
     public SaGrid(TableOptions<TData> options) : base(options)
     {
@@ -32,8 +39,18 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
         _sideBarService = context.Resolve<SideBarService>();
         _statusBarService = context.Resolve<StatusBarService>();
+        _eventService = context.TryResolve<IEventService>(out var eventService) ? eventService : new EventService();
+        _clientSideRowModel = new ClientSideRowModel<TData>(this);
+        _columnInteractiveService = new ColumnInteractiveService<TData>(this, _eventService);
+        
         _sideBarService.EnsureDefaultPanels(this);
         _statusBarService.EnsureDefaultWidgets(this);
+        
+        // Initialize the client-side row model
+        _clientSideRowModel.Start();
+        
+        // Emit grid ready event
+        _eventService.DispatchEvent(GridEventTypes.GridReady, new GridReadyEventArgs(this));
     }
 
     // Constructor for test compatibility  
@@ -46,8 +63,18 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
         _sideBarService = context.Resolve<SideBarService>();
         _statusBarService = context.Resolve<StatusBarService>();
+        _eventService = context.TryResolve<IEventService>(out var eventService) ? eventService : new EventService();
+        _clientSideRowModel = new ClientSideRowModel<TData>(this);
+        _columnInteractiveService = new ColumnInteractiveService<TData>(this, _eventService);
+        
         _sideBarService.EnsureDefaultPanels(this);
         _statusBarService.EnsureDefaultWidgets(this);
+        
+        // Initialize the client-side row model
+        _clientSideRowModel.Start();
+        
+        // Emit grid ready event
+        _eventService.DispatchEvent(GridEventTypes.GridReady, new GridReadyEventArgs(this));
     }
 
     // Advanced filtering capabilities
@@ -366,23 +393,6 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         });
     }
 
-    public void MoveColumn(string columnId, int toIndex)
-    {
-        var currentOrder = State.ColumnOrder?.Order ?? AllLeafColumns.Select(c => c.Id).ToList();
-        var newOrder = currentOrder.ToList();
-
-        // Remove the column from its current position
-        newOrder.Remove(columnId);
-
-        // Insert at the new position
-        var clampedIndex = Math.Max(0, Math.Min(toIndex, newOrder.Count));
-        newOrder.Insert(clampedIndex, columnId);
-
-        SetState(state => state with 
-        { 
-            ColumnOrder = new ColumnOrderState(newOrder)
-        });
-    }
 
     // Theme support for tests
     private string? _currentTheme;
@@ -606,6 +616,131 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public StatusBarState GetStatusBarState()
     {
         return _statusBarService.GetState(this);
+    }
+
+    // Advanced Grid API methods following AG Grid pattern
+    
+    /// <summary>
+    /// Get the event service for adding custom event listeners
+    /// </summary>
+    public IEventService GetEventService()
+    {
+        return _eventService;
+    }
+
+    /// <summary>
+    /// Get the client-side row model for advanced row operations
+    /// </summary>
+    public IClientSideRowModel<TData> GetRowModel()
+    {
+        return _clientSideRowModel;
+    }
+
+    /// <summary>
+    /// Add event listener for typed events
+    /// </summary>
+    public void AddEventListener<T>(string eventType, Action<T> listener) where T : class
+    {
+        _eventService.AddEventListener(eventType, listener);
+    }
+
+    /// <summary>
+    /// Remove event listener
+    /// </summary>
+    public void RemoveEventListener<T>(string eventType, Action<T> listener) where T : class
+    {
+        _eventService.RemoveEventListener(eventType, listener);
+    }
+
+    /// <summary>
+    /// Add global event listener that receives all events
+    /// </summary>
+    public void AddGlobalEventListener(Action<string, object> listener, bool async = true)
+    {
+        _eventService.AddGlobalListener(listener, async);
+    }
+
+    /// <summary>
+    /// Refresh the row model with specified parameters
+    /// </summary>
+    public void RefreshModel(RefreshModelParams? parameters = null)
+    {
+        parameters ??= new RefreshModelParams(ClientSideRowModelStage.Everything);
+        _clientSideRowModel.RefreshModel(parameters);
+        _eventService.DispatchEvent(GridEventTypes.ModelUpdated, new ModelUpdatedEventArgs(this, newData: parameters.NewData));
+    }
+
+    /// <summary>
+    /// Update row data using transaction pattern (AG Grid style)
+    /// </summary>
+    public RowTransaction<TData>? UpdateRowData(RowDataTransaction<TData> transaction)
+    {
+        var result = _clientSideRowModel.UpdateRowData(transaction);
+        if (result != null)
+        {
+            _eventService.DispatchEvent(GridEventTypes.RowDataUpdated, new RowDataChangedEventArgs<TData>(this, _clientSideRowModel.GetTopLevelRows() ?? new List<Row<TData>>()));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Emit a custom event
+    /// </summary>
+    public void DispatchEvent<T>(string eventType, T eventData) where T : class
+    {
+        _eventService.DispatchEvent(eventType, eventData);
+    }
+
+    // ================================
+    // Column Interactive Features API
+    // ================================
+
+    /// <summary>
+    /// Get the column interactive service
+    /// </summary>
+    public ColumnInteractiveService<TData> GetColumnInteractiveService()
+    {
+        return _columnInteractiveService;
+    }
+
+    /// <summary>
+    /// Move a column to a new position (simplified AG Grid style)
+    /// </summary>
+    public bool MoveColumn(string columnId, int toIndex)
+    {
+        return _columnInteractiveService.MoveColumn(columnId, toIndex);
+    }
+
+    /// <summary>
+    /// Set the width of a column by ID
+    /// </summary>
+    public bool SetColumnWidth(string columnId, double width)
+    {
+        return _columnInteractiveService.SetColumnWidth(columnId, width);
+    }
+
+    /// <summary>
+    /// Auto-size a column to fit its content
+    /// </summary>
+    public bool AutoSizeColumn(string columnId)
+    {
+        return _columnInteractiveService.AutoSizeColumn(columnId);
+    }
+
+    /// <summary>
+    /// Toggle column visibility
+    /// </summary>
+    public bool ToggleColumnVisibility(string columnId)
+    {
+        return _columnInteractiveService.ToggleColumnVisibility(columnId);
+    }
+
+    /// <summary>
+    /// Pin/unpin a column
+    /// </summary>
+    public bool SetColumnPinned(string columnId, bool pinned)
+    {
+        return _columnInteractiveService.SetColumnPinned(columnId, pinned);
     }
 
 

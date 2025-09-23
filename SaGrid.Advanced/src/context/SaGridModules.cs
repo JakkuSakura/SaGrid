@@ -1,4 +1,5 @@
 using SaGrid.Advanced.Context;
+using SaGrid.Advanced.Events;
 using SaGrid.Advanced.Modules.SideBar;
 using SaGrid.Advanced.Modules.StatusBar;
 using SaGrid.Advanced.Modules.Export;
@@ -28,6 +29,7 @@ internal static class SaGridModules
 
             ModuleRegistry.RegisterModules(new IAdvancedModule[]
             {
+                new EventModule(),
                 new SideBarModule(),
                 new StatusBarModule(),
                 new SortingEnhancementsModule(),

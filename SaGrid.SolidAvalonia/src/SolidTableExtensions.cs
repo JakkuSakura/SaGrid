@@ -166,6 +166,150 @@ public static class SolidTableExtensions
         return container;
     }
 
+    public static Control InteractiveHeader<TData>(
+        this SolidTable<TData> solidTable,
+        IHeader<TData> header,
+        Action<string, SortDirection?>? onSort = null,
+        Action<string, double>? onResize = null,
+        Action<string, int>? onMove = null)
+        where TData : class
+    {
+        var headerText = solidTable.GetHeaderContent(header);
+        
+        // Create a container for the header with interactive features
+        var container = new StackPanel()
+            .Orientation(Orientation.Horizontal)
+            .Children(
+                // Main header content (clickable for sorting)
+                new Button()
+                    .Content(headerText)
+                    .Background(header.Column.SortDirection.HasValue
+                        ? Brushes.LightYellow
+                        : Brushes.LightBlue)
+                    .OnClick(_ =>
+                    {
+                        SortDirection? nextDirection = header.Column.SortDirection switch
+                        {
+                            null => SortDirection.Ascending,
+                            SortDirection.Ascending => SortDirection.Descending,
+                            SortDirection.Descending => null,
+                            _ => SortDirection.Ascending
+                        };
+
+                        onSort?.Invoke(header.Column.Id, nextDirection);
+
+                        if (nextDirection.HasValue)
+                        {
+                            solidTable.Table.SetSorting(header.Column.Id, nextDirection.Value);
+                        }
+                        else
+                        {
+                            solidTable.Table.SetSorting(Array.Empty<ColumnSort>());
+                        }
+                    }),
+                
+                // Auto-size button
+                new Button()
+                    .Content("⚏")
+                    .Width(20)
+                    .ToolTip("Auto-size column")
+                    .OnClick(_ =>
+                    {
+                        // Auto-size functionality requires SaGrid.Advanced
+                        // if (solidTable.Table is SaGrid<TData> saGrid)
+                        // {
+                        //     saGrid.AutoSizeColumn(header.Column.Id);
+                        // }
+                    }),
+                
+                // Column menu button
+                new Button()
+                    .Content("⋮")
+                    .Width(20)
+                    .ToolTip("Column options")
+                    .OnClick(_ =>
+                    {
+                        // Column menu functionality requires SaGrid.Advanced
+                        // if (solidTable.Table is SaGrid<TData> saGrid)
+                        // {
+                        //     saGrid.ToggleColumnVisibility(header.Column.Id);
+                        // }
+                    })
+            );
+
+        return container;
+    }
+
+    public static Control DraggableHeader<TData>(
+        this SolidTable<TData> solidTable,
+        IHeader<TData> header,
+        Action<string, int>? onMove = null)
+        where TData : class
+    {
+        var headerButton = new Button()
+            .Content(solidTable.GetHeaderContent(header))
+            .Background(header.Column.SortDirection.HasValue
+                ? Brushes.LightYellow
+                : Brushes.LightBlue);
+
+        // Add basic drag detection (simplified with double-click)
+
+        // Simplified drag handling - just use click for now
+        headerButton.OnClick(_ =>
+        {
+            onMove?.Invoke(header.Column.Id, 0);
+            
+            // Column move functionality requires SaGrid.Advanced
+            // if (solidTable.Table is SaGrid<TData> saGrid)
+            // {
+            //     var currentIndex = solidTable.Table.AllLeafColumns.ToList().FindIndex(c => c.Id == header.Column.Id);
+            //     var newIndex = (currentIndex + 1) % solidTable.Table.AllLeafColumns.Count();
+            //     saGrid.MoveColumn(header.Column.Id, newIndex);
+            // }
+        });
+
+        return headerButton;
+    }
+
+    public static Control ColumnManagementPanel<TData>(
+        this SolidTable<TData> solidTable)
+        where TData : class
+    {
+        var panel = new StackPanel()
+            .Orientation(Orientation.Vertical)
+            .Spacing(10);
+
+        // Column management functionality requires SaGrid.Advanced
+        // if (solidTable.Table is SaGrid<TData> saGrid)
+        // {
+        //     panel.Children.Add(new TextBlock().Text("Column Visibility:").FontWeight(FontWeight.Bold));
+        //     
+        //     foreach (var column in solidTable.Table.AllLeafColumns)
+        //     {
+        //         var checkBox = new CheckBox()
+        //             .Content(column.Id)
+        //             .IsChecked(column.IsVisible)
+        //             .OnChecked(_ => saGrid.ToggleColumnVisibility(column.Id))
+        //             .OnUnchecked(_ => saGrid.ToggleColumnVisibility(column.Id));
+        //         
+        //         panel.Children.Add(checkBox);
+        //     }
+        //
+        //     panel.Children.Add(new Button()
+        //         .Content("Auto-size All Columns")
+        //         .OnClick(_ =>
+        //         {
+        //             foreach (var column in solidTable.Table.AllLeafColumns)
+        //             {
+        //                 saGrid.AutoSizeColumn(column.Id);
+        //             }
+        //         }));
+        // }
+
+        return new ScrollViewer()
+            .Content(panel);
+    }
+
     internal static string GetHeaderContent<TData>(this SolidTable<TData> solidTable, IHeader<TData> header)
     {
         return header.Column.ColumnDef.Header?.ToString() ?? header.Column.Id;
