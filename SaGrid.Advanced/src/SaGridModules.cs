@@ -1,6 +1,9 @@
 using SaGrid.Advanced.Modules;
 using SaGrid.Advanced.Modules.SideBar;
+using SaGrid.Modules.Export;
+using SaGrid.Modules.Selection;
 using SaGrid.Modules.SideBar;
+using SaGrid.Modules.Sorting;
 
 namespace SaGrid;
 
@@ -25,7 +28,10 @@ internal static class SaGridModules
 
             ModuleRegistry.RegisterModules(new IAdvancedModule[]
             {
-                new SideBarModule()
+                new SideBarModule(),
+                new SortingEnhancementsModule(),
+                new CellSelectionModule(),
+                new ExportModule()
             });
 
             _initialized = true;

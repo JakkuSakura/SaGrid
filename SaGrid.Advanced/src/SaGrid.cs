@@ -1,7 +1,9 @@
-using System.Text;
-using System.Text.Json;
 using Avalonia.Threading;
 using SaGrid.Core;
+using SaGrid.Advanced.Modules;
+using SaGrid.Modules.Export;
+using SaGrid.Modules.Selection;
+using SaGrid.Modules.Sorting;
 
 namespace SaGrid;
 
@@ -11,16 +13,27 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     
     // Callback for UI updates
     private Action? _onUIUpdate;
+    private readonly ExportService _exportService;
+    private readonly CellSelectionService _cellSelectionService;
+    private readonly SortingEnhancementsService _sortingEnhancementsService;
 
     public SaGrid(TableOptions<TData> options) : base(options)
     {
         SaGridModules.EnsureInitialized();
+        var context = ModuleRegistry.Context;
+        _exportService = context.Resolve<ExportService>();
+        _cellSelectionService = context.Resolve<CellSelectionService>();
+        _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
     }
 
     // Constructor for test compatibility  
     public SaGrid(Table<TData> table) : base(table.Options)
     {
         SaGridModules.EnsureInitialized();
+        var context = ModuleRegistry.Context;
+        _exportService = context.Resolve<ExportService>();
+        _cellSelectionService = context.Resolve<CellSelectionService>();
+        _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
     }
 
     // Advanced filtering capabilities
@@ -47,76 +60,24 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     }
 
     // Export functionality
-    public async Task<string> ExportToCsvAsync()
+    public Task<string> ExportToCsvAsync()
     {
-        return await Task.Run(() =>
-        {
-            var csv = new StringBuilder();
-            
-            // Headers
-            var headers = VisibleLeafColumns.Select(c => EscapeCsvValue(c.Id)).ToList();
-            csv.AppendLine(string.Join(",", headers));
-            
-            // Data rows
-            foreach (var row in RowModel.Rows)
-            {
-                var values = VisibleLeafColumns.Select(column =>
-                {
-                    var cell = row.GetCell(column.Id);
-                    var value = cell.Value?.ToString() ?? "";
-                    return EscapeCsvValue(value);
-                });
-                csv.AppendLine(string.Join(",", values));
-            }
-            
-            return csv.ToString();
-        });
+        return _exportService.ExportToCsvAsync(this);
     }
 
     public string ExportToCsv()
     {
-        return ExportToCsvAsync().GetAwaiter().GetResult();
+        return _exportService.ExportToCsv(this);
     }
 
-    public async Task<string> ExportToJsonAsync()
+    public Task<string> ExportToJsonAsync()
     {
-        return await Task.Run(() =>
-        {
-            var data = RowModel.Rows.Select(row =>
-            {
-                var obj = new Dictionary<string, object?>();
-                foreach (var column in VisibleLeafColumns)
-                {
-                    var cell = row.GetCell(column.Id);
-                    obj[column.Id] = cell.Value;
-                }
-                return obj;
-            }).ToList();
-            
-            return JsonSerializer.Serialize(data, new JsonSerializerOptions 
-            { 
-                WriteIndented = true 
-            });
-        });
+        return _exportService.ExportToJsonAsync(this);
     }
 
     public string ExportToJson()
     {
-        return ExportToJsonAsync().GetAwaiter().GetResult();
-    }
-
-    private static string EscapeCsvValue(string value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return "";
-            
-        if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
-        {
-            value = value.Replace("\"", "\"\"");
-            return $"\"{value}\"";
-        }
-        
-        return value;
+        return _exportService.ExportToJson(this);
     }
 
     // Advanced search and filtering
@@ -159,16 +120,13 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         return GetTotalColumnCount() - GetVisibleColumnCount();
     }
 
-    // Multi-sort helpers for the example
-    private bool? _multiSortOverride;
     public bool IsMultiSortEnabled()
     {
-        return _multiSortOverride ?? Options.EnableMultiSort;
+        return _sortingEnhancementsService.IsMultiSortEnabled(this);
     }
     public void ToggleMultiSortOverride()
     {
-        _multiSortOverride = !IsMultiSortEnabled();
-        ScheduleUIUpdate();
+        _sortingEnhancementsService.ToggleMultiSortOverride(this);
     }
 
     // Keyboard navigation support
@@ -496,7 +454,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         ScheduleUIUpdate();
     }
 
-    private void ScheduleUIUpdate()
+    internal void ScheduleUIUpdate()
     {
         try
         {
@@ -511,189 +469,59 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public new void PreviousPage()
     {
         base.PreviousPage();
+        NotifyUIUpdate();
+    }
+
+    internal void NotifyUIUpdate()
+    {
         _onUIUpdate?.Invoke();
     }
 
     public void SelectCell(int rowIndex, string columnId, bool addToSelection = false)
     {
-        if (!Options.EnableCellSelection) return;
-
-        var cellPosition = new CellPosition(rowIndex, columnId);
-        var currentSelection = State.CellSelection ?? new CellSelectionState();
-        
-        Console.WriteLine($"DEBUG SelectCell: Row {rowIndex}, Col {columnId}, AddToSelection: {addToSelection}, CurrentSelected: {currentSelection.SelectedCells.Count}");
-        
-        HashSet<CellPosition> newSelectedCells;
-        
-        if (addToSelection)
-        {
-            newSelectedCells = new HashSet<CellPosition>(currentSelection.SelectedCells) { cellPosition };
-        }
-        else
-        {
-            newSelectedCells = new HashSet<CellPosition> { cellPosition };
-        }
-
-        Console.WriteLine($"DEBUG SelectCell: NewSelectedCount: {newSelectedCells.Count}, Setting active to Row {rowIndex}, Col {columnId}");
-
-        SetState(state => state with 
-        { 
-            CellSelection = new CellSelectionState(newSelectedCells, cellPosition, null)
-        });
-
-        Console.WriteLine($"DEBUG SelectCell: After SetState, Selected count: {State.CellSelection?.SelectedCells.Count ?? 0}");
-
-        // Trigger UI update
-        _onUIUpdate?.Invoke();
+        _cellSelectionService.SelectCell(this, rowIndex, columnId, addToSelection);
     }
 
     public void SelectCellRange(int startRowIndex, string startColumnId, int endRowIndex, string endColumnId)
     {
-        if (!Options.EnableCellSelection) return;
-
-        var startPos = new CellPosition(startRowIndex, startColumnId);
-        var endPos = new CellPosition(endRowIndex, endColumnId);
-        var range = new CellRange(startPos, endPos);
-
-        // Calculate all cells in the range
-        var selectedCells = new HashSet<CellPosition>();
-        var startRow = Math.Min(startRowIndex, endRowIndex);
-        var endRow = Math.Max(startRowIndex, endRowIndex);
-        
-        // Get column indices for proper range selection
-        var visibleColumns = VisibleLeafColumns.ToList();
-        var startColIndex = visibleColumns.FindIndex(c => c.Id == startColumnId);
-        var endColIndex = visibleColumns.FindIndex(c => c.Id == endColumnId);
-        
-        if (startColIndex >= 0 && endColIndex >= 0)
-        {
-            var minColIndex = Math.Min(startColIndex, endColIndex);
-            var maxColIndex = Math.Max(startColIndex, endColIndex);
-            
-            for (int rowIndex = startRow; rowIndex <= endRow; rowIndex++)
-            {
-                for (int colIndex = minColIndex; colIndex <= maxColIndex; colIndex++)
-                {
-                    selectedCells.Add(new CellPosition(rowIndex, visibleColumns[colIndex].Id));
-                }
-            }
-        }
-
-        SetState(state => state with 
-        { 
-            CellSelection = new CellSelectionState(selectedCells, startPos, range)
-        });
-
-        // Trigger UI update
-        _onUIUpdate?.Invoke();
+        _cellSelectionService.SelectCellRange(this, startRowIndex, startColumnId, endRowIndex, endColumnId);
     }
 
     public void ClearCellSelection()
     {
-        SetState(state => state with 
-        { 
-            CellSelection = new CellSelectionState()
-        });
-
-        // Trigger UI update
-        _onUIUpdate?.Invoke();
+        _cellSelectionService.ClearSelection(this);
     }
 
     public bool IsCellSelected(int rowIndex, string columnId)
     {
-        var cellSelection = State.CellSelection;
-        return cellSelection?.IsCellSelected(rowIndex, columnId) == true;
+        return _cellSelectionService.IsCellSelected(this, rowIndex, columnId);
     }
 
     public (int RowIndex, string ColumnId)? GetActiveCell()
     {
-        var activeCell = State.CellSelection?.ActiveCell;
-        return activeCell != null ? (activeCell.RowIndex, activeCell.ColumnId) : null;
+        return _cellSelectionService.GetActiveCell(this);
     }
 
     public IReadOnlyCollection<CellPosition> GetSelectedCells()
     {
-        return State.CellSelection?.SelectedCells ?? new HashSet<CellPosition>();
+        return _cellSelectionService.GetSelectedCells(this);
     }
 
     public int GetSelectedCellCount()
     {
-        return State.CellSelection?.SelectedCells.Count ?? 0;
+        return _cellSelectionService.GetSelectedCellCount(this);
     }
 
     // Copy selected cells to clipboard (as text)
     public string CopySelectedCells()
     {
-        var selection = State.CellSelection;
-        if (selection == null || selection.SelectedCells.Count == 0)
-            return "";
-
-        // Group by row and sort
-        var cellsByRow = selection.SelectedCells
-            .GroupBy(c => c.RowIndex)
-            .OrderBy(g => g.Key)
-            .ToList();
-
-        var result = new StringBuilder();
-        
-        foreach (var rowGroup in cellsByRow)
-        {
-            var rowIndex = rowGroup.Key;
-            if (rowIndex >= 0 && rowIndex < RowModel.Rows.Count)
-            {
-                var row = RowModel.Rows[rowIndex];
-                var sortedCells = rowGroup.OrderBy(c => 
-                {
-                    var colIndex = VisibleLeafColumns.ToList().FindIndex(col => col.Id == c.ColumnId);
-                    return colIndex >= 0 ? colIndex : int.MaxValue;
-                }).ToList();
-
-                var cellValues = sortedCells.Select(cellPos =>
-                {
-                    var cell = row.GetCell(cellPos.ColumnId);
-                    return cell.Value?.ToString() ?? "";
-                });
-
-                result.AppendLine(string.Join("\t", cellValues));
-            }
-        }
-
-        return result.ToString().TrimEnd();
+        return _cellSelectionService.CopySelectedCells(this);
     }
 
     // Keyboard navigation for cell selection
     public bool NavigateCell(CellNavigationDirection direction)
     {
-        var activeCell = GetActiveCell();
-        if (activeCell == null) return false;
-
-        var visibleColumns = VisibleLeafColumns.ToList();
-        var currentColIndex = visibleColumns.FindIndex(c => c.Id == activeCell.Value.ColumnId);
-        var currentRowIndex = activeCell.Value.RowIndex;
-
-        (int RowIndex, string ColumnId)? newActiveCell = direction switch
-        {
-            CellNavigationDirection.Up when currentRowIndex > 0 => 
-                (currentRowIndex - 1, activeCell.Value.ColumnId),
-            
-            CellNavigationDirection.Down when currentRowIndex < RowModel.Rows.Count - 1 => 
-                (currentRowIndex + 1, activeCell.Value.ColumnId),
-            
-            CellNavigationDirection.Left when currentColIndex > 0 => 
-                (currentRowIndex, visibleColumns[currentColIndex - 1].Id),
-            
-            CellNavigationDirection.Right when currentColIndex < visibleColumns.Count - 1 => 
-                (currentRowIndex, visibleColumns[currentColIndex + 1].Id),
-            
-            _ => null
-        };
-
-        if (newActiveCell != null)
-        {
-            SelectCell(newActiveCell.Value.RowIndex, newActiveCell.Value.ColumnId);
-            return true;
-        }
-        return false;
+        return _cellSelectionService.Navigate(this, direction);
     }
 
 
