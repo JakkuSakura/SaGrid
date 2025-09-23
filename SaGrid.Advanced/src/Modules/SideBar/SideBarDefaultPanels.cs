@@ -13,7 +13,6 @@ namespace SaGrid.Advanced.Modules.SideBar;
 public static class SideBarDefaultPanels
 {
     public const string ColumnManagerId = "columnManager";
-    public const string FilterPanelId = "filterPanel";
     public const string InfoPanelId = "infoPanel";
 
     public static IReadOnlyList<SideBarPanelDefinition> CreateDefaultPanels<TData>(SaGrid<TData> grid)
@@ -21,7 +20,6 @@ public static class SideBarDefaultPanels
         return new List<SideBarPanelDefinition>
         {
             new SideBarPanelDefinition(ColumnManagerId, "Columns", () => new ColumnManagerView<TData>(grid)),
-            new SideBarPanelDefinition(FilterPanelId, "Filters", () => new FilterPanelView<TData>(grid)),
             new SideBarPanelDefinition(InfoPanelId, "Info", () => new InfoPanelView<TData>(grid))
         };
     }
@@ -86,103 +84,6 @@ public static class SideBarDefaultPanels
         }
     }
 
-    private sealed class FilterPanelView<TData> : UserControl
-    {
-        private readonly SaGrid<TData> _grid;
-        private readonly StackPanel _container;
-
-        public FilterPanelView(SaGrid<TData> grid)
-        {
-            _grid = grid;
-            _container = new StackPanel
-            {
-                Orientation = Orientation.Vertical,
-                Margin = new Thickness(12)
-            };
-
-            var scroll = new ScrollViewer { Content = _container };
-            Content = scroll;
-
-            Build();
-        }
-
-        private void Build()
-        {
-            _container.Children.Clear();
-
-            _container.Children.Add(new TextBlock
-            {
-                Text = "Active Filters",
-                FontWeight = FontWeight.Bold,
-                Margin = new Thickness(0, 0, 0, 8)
-            });
-
-            var filters = _grid.State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
-            if (filters.Count == 0)
-            {
-                _container.Children.Add(new TextBlock
-                {
-                    Text = "No column filters applied.",
-                    FontStyle = FontStyle.Italic
-                });
-            }
-            else
-            {
-                foreach (var filter in filters)
-                {
-                    var panel = new StackPanel
-                    {
-                        Orientation = Orientation.Horizontal,
-                        Margin = new Thickness(0, 0, 0, 4)
-                    };
-
-                    panel.Children.Add(new TextBlock
-                    {
-                        Text = filter.Id,
-                        FontWeight = FontWeight.SemiBold,
-                        Margin = new Thickness(0, 0, 8, 0)
-                    });
-
-                    panel.Children.Add(new TextBlock
-                    {
-                        Text = filter.Value?.ToString() ?? string.Empty,
-                        TextWrapping = TextWrapping.Wrap
-                    });
-
-                    var clearButton = new Button
-                    {
-                        Content = "Clear",
-                        Margin = new Thickness(8, 0, 0, 0),
-                        Padding = new Thickness(6, 2)
-                    };
-
-                    clearButton.Click += (_, _) =>
-                    {
-                        _grid.ClearColumnFilter(filter.Id);
-                    };
-
-                    panel.Children.Add(clearButton);
-                    _container.Children.Add(panel);
-                }
-            }
-
-            var clearAllButton = new Button
-            {
-                Content = "Clear All Filters",
-                Margin = new Thickness(0, 8, 0, 0),
-                Padding = new Thickness(8, 4),
-                HorizontalAlignment = HorizontalAlignment.Left
-            };
-
-            clearAllButton.Click += (_, _) =>
-            {
-                _grid.ClearColumnFilters();
-                _grid.ClearGlobalFilter();
-            };
-
-            _container.Children.Add(clearAllButton);
-        }
-    }
 
     private sealed class InfoPanelView<TData> : UserControl
     {

@@ -32,12 +32,8 @@ internal class SaGridBodyRenderer<TData>
 
     private Control CreateRow(SaGrid<TData> saGrid, Row<TData> row, Func<SaGrid<TData>>? gridSignalGetter = null, Func<int>? selectionSignalGetter = null)
     {
-        Console.WriteLine($"DEBUG cell row={row.Index} col=id value={row.Original}");
-
         var cells = saGrid.VisibleLeafColumns.Select(column =>
         {
-            Console.WriteLine($"DEBUG cell row={row.Index} col={column.Id} value={SaGridContentHelper<TData>.GetCellContent(row, column)}");
-            
             // Use reactive cells to support cell selection
             if (gridSignalGetter != null)
             {

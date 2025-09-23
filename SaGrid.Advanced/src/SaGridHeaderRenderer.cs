@@ -176,14 +176,8 @@ internal class SaGridHeaderRenderer<TData>
     if (saGrid.Options.EnableColumnFilters)
     {
       var filterRow = CreateFilterRow(saGrid);
-      Console.WriteLine($"Adding filter row to header - Total header controls: {headerControls.Count + 1}");
       headerControls.Add(filterRow);
     }
-    else
-    {
-      Console.WriteLine("Column filtering is disabled - no filter row will be added");
-    }
-
     return new StackPanel()
       .Orientation(Orientation.Vertical)
       .Children(headerControls.ToArray());
@@ -191,11 +185,8 @@ internal class SaGridHeaderRenderer<TData>
 
   private Control CreateFilterRow(SaGrid<TData> saGrid)
   {
-    Console.WriteLine($"Creating filter row with {saGrid.VisibleLeafColumns.Count} columns");
-
     var filterControls = saGrid.VisibleLeafColumns.Select(column =>
     {
-      Console.WriteLine($"Creating filter for column: {column.Id}");
       var textBox = CreateFilterTextBox(saGrid, column);
       return new Border()
         .BorderThickness(0, 0, 1, 1)
@@ -207,7 +198,6 @@ internal class SaGridHeaderRenderer<TData>
         .Child(textBox);
     }).ToArray();
 
-    // Put filter row inside a Border with a visible bottom line to suggest input area
     return new Border()
       .BorderThickness(new Thickness(0, 0, 0, 1))
       .BorderBrush(Brushes.LightGray)
@@ -220,8 +210,6 @@ internal class SaGridHeaderRenderer<TData>
 
   private Control CreateFilterTextBox(SaGrid<TData> saGrid, Column<TData> column)
   {
-    Console.WriteLine($"Creating TextBox for column {column.Id}");
-
     var textBox = new TextBox
     {
       Watermark = $"Filter {column.Id}...",
@@ -244,24 +232,16 @@ internal class SaGridHeaderRenderer<TData>
     textBox.TabIndex = 0;
     textBox.IsTabStop = true;
 
-    Console.WriteLine(
-      $"TextBox created for {column.Id} - Focusable: {textBox.Focusable}, IsEnabled: {textBox.IsEnabled}");
-
-    // Add multiple event handlers to debug what's happening
     textBox.GotFocus += (sender, args) =>
     {
-      Console.WriteLine($"TextBox for column {column.Id} got focus");
       if (sender is TextBox tb)
       {
         _onFilterFocus?.Invoke(tb);
       }
     };
 
-    textBox.LostFocus += (sender, args) => { Console.WriteLine($"TextBox for column {column.Id} lost focus"); };
-
     textBox.PointerPressed += (sender, args) =>
     {
-      Console.WriteLine($"TextBox for column {column.Id} pointer pressed");
       // Explicitly capture focus on click to resist parent re-renders
       if (sender is TextBox tb && !tb.IsFocused)
       {
@@ -270,19 +250,6 @@ internal class SaGridHeaderRenderer<TData>
 
       args.Handled = false;
     };
-
-    textBox.PointerEntered += (sender, args) =>
-    {
-      Console.WriteLine($"TextBox for column {column.Id} pointer entered");
-    };
-
-    textBox.KeyDown += (sender, args) =>
-    {
-      // Let TextBox handle keys normally; grid ignores keys from TextBox
-      Console.WriteLine($"TextBox for column {column.Id} key down: {args.Key}");
-    };
-
-    textBox.TextChanging += (sender, args) => { Console.WriteLine($"TextBox for column {column.Id} text changing"); };
 
     textBox.TextChanged += (sender, args) =>
     {
@@ -300,7 +267,6 @@ internal class SaGridHeaderRenderer<TData>
 
         if (!equals)
         {
-          Console.WriteLine($"Filter changed for column {column.Id}: '{currentValue}' -> '{newValue}'");
           saGrid.SetColumnFilter(column.Id, newValue);
         }
       }
@@ -356,4 +322,5 @@ internal class SaGridHeaderRenderer<TData>
 
     return container;
   }
+
 }

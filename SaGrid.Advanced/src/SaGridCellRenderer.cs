@@ -33,8 +33,6 @@ internal class SaGridCellRenderer<TData>
 
     public Control CreateReactiveCell(SaGrid<TData> saGrid, Row<TData> row, Column<TData> column, Func<SaGrid<TData>> gridSignalGetter, Func<int>? selectionSignalGetter = null)
     {
-        Console.WriteLine($"Creating reactive cell for row {row.Index}, column {column.Id}");
-        
         return Reactive(() =>
         {
             // Access both the grid signal and selection signal to detect state changes
@@ -47,9 +45,7 @@ internal class SaGridCellRenderer<TData>
             
             var background = GetCellBackground(isSelected, isActiveCell, row.Index);
             var content = SaGridContentHelper<TData>.GetCellContent(row, column);
-            
-            Console.WriteLine($"Reactive cell render - Row {row.Index}, Col {column.Id}: Selected={isSelected}, Active={isActiveCell}");
-            
+
             var border = new Border()
                 .BorderThickness(0, 0, 1, 1)
                 .BorderBrush(Brushes.LightGray)
@@ -68,7 +64,6 @@ internal class SaGridCellRenderer<TData>
             border.PointerPressed += (sender, e) =>
             {
                 var isCtrlPressed = e.KeyModifiers.HasFlag(KeyModifiers.Control);
-                Console.WriteLine($"Cell clicked: Row {row.Index}, Column {column.Id}, Ctrl: {isCtrlPressed}");
                 
                 currentGrid?.SelectCell(row.Index, column.Id, isCtrlPressed);
                 e.Handled = true; // Prevent event from bubbling up

@@ -60,8 +60,6 @@ public class SaGridComponent<TData> : Component
 
     protected override object Build()
     {
-        Console.WriteLine("SaGridComponent.Build invoked");
-        
         // Initialize reactive signals and wire SaGrid.Advanced to trigger them
         if (_gridSignal == null)
         {
