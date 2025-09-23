@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using SaGrid.Advanced.Modules;
 using SaGrid.Advanced.Modules.SideBar;
 
@@ -12,9 +14,15 @@ internal sealed class SideBarModule : IAdvancedModule
     public void Initialize(AdvancedModuleContext context)
     {
         // Register the side bar service so UI layers can retrieve it later.
-        if (!context.TryResolve<SideBarService>(out _))
+        if (!context.TryResolve<SideBarService>(out var service))
         {
-            context.RegisterService(new SideBarService());
+            service = new SideBarService();
+            context.RegisterService(service);
+        }
+
+        if (!service.GetPanels().Any())
+        {
+            service.SetPanels(SideBarDefaultPanels.CreateDefaultPanels());
         }
     }
 }

@@ -1,6 +1,7 @@
 using Avalonia.Threading;
 using SaGrid.Core;
 using SaGrid.Advanced.Modules;
+using SaGrid.Advanced.Modules.SideBar;
 using SaGrid.Modules.Export;
 using SaGrid.Modules.Selection;
 using SaGrid.Modules.Sorting;
@@ -16,6 +17,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     private readonly ExportService _exportService;
     private readonly CellSelectionService _cellSelectionService;
     private readonly SortingEnhancementsService _sortingEnhancementsService;
+    private readonly SideBarService _sideBarService;
 
     public SaGrid(TableOptions<TData> options) : base(options)
     {
@@ -24,6 +26,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _exportService = context.Resolve<ExportService>();
         _cellSelectionService = context.Resolve<CellSelectionService>();
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
+        _sideBarService = context.Resolve<SideBarService>();
     }
 
     // Constructor for test compatibility  
@@ -34,6 +37,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _exportService = context.Resolve<ExportService>();
         _cellSelectionService = context.Resolve<CellSelectionService>();
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
+        _sideBarService = context.Resolve<SideBarService>();
     }
 
     // Advanced filtering capabilities
@@ -119,6 +123,29 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     {
         return GetTotalColumnCount() - GetVisibleColumnCount();
     }
+
+    // Side bar APIs
+    public SideBarService GetSideBarService() => _sideBarService;
+
+    public IReadOnlyList<SideBarPanelDefinition> GetSideBarPanels() => _sideBarService.GetPanels();
+
+    public void SetSideBarPanels(IEnumerable<SideBarPanelDefinition> panels) => _sideBarService.SetPanels(panels);
+
+    public bool IsSideBarVisible() => _sideBarService.IsVisible;
+
+    public void SetSideBarVisible(bool visible) => _sideBarService.SetVisible(visible);
+
+    public void ToggleSideBarVisible() => _sideBarService.ToggleVisible();
+
+    public void OpenToolPanel(string panelId) => _sideBarService.OpenPanel(panelId);
+
+    public void CloseToolPanel() => _sideBarService.ClosePanel();
+
+    public string? GetOpenedToolPanel() => _sideBarService.ActivePanelId;
+
+    public SideBarPosition GetSideBarPosition() => _sideBarService.Position;
+
+    public void SetSideBarPosition(SideBarPosition position) => _sideBarService.SetPosition(position);
 
     public bool IsMultiSortEnabled()
     {

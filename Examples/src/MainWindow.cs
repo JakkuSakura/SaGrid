@@ -8,6 +8,9 @@ using SolidAvalonia;
 using static SolidAvalonia.Solid;
 using System.Diagnostics;
 using Avalonia.Threading;
+using SaGrid.Advanced.Modules.SideBar;
+using System;
+using SaGrid.Modules.SideBar;
 
 namespace Examples;
 
@@ -26,6 +29,8 @@ public class MainWindow : Window
     private Button _multiSortBtn = null!;
     private Button _resetFiltersBtn = null!;
     private Button _resetSortingBtn = null!;
+    private Button _toggleSideBarBtn = null!;
+    private Button _openColumnsPanelBtn = null!;
 
     private void InitializeComponent()
     {
@@ -178,9 +183,25 @@ public class MainWindow : Window
         };
         container.Children.Add(infoTextBlock);
 
-        // Create SaGridComponent display for SaGrid.Advanced
+        // Create SaGrid.Advanced host area with side bar + table
+        var sideBarHost = new SideBarHost();
+        sideBarHost.Initialize(saGrid.GetSideBarService());
+
         var saGridComponent = new SaGridComponent<Person>(saGrid);
-        container.Children.Add(saGridComponent);
+
+        var tableArea = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            Margin = new Thickness(20, 10, 20, 20)
+        };
+
+        tableArea.Children.Add(sideBarHost);
+        Grid.SetColumn(sideBarHost, 0);
+
+        tableArea.Children.Add(saGridComponent);
+        Grid.SetColumn(saGridComponent, 1);
+
+        container.Children.Add(tableArea);
 
         return new ScrollViewer { Content = container };
     }
@@ -194,11 +215,12 @@ public class MainWindow : Window
         };
 
         // Minimal, reliable actions
-        var buttonPanel = new StackPanel 
-        { 
-            Orientation = Orientation.Horizontal,
+        var buttonPanel = new WrapPanel
+        {
             Margin = new Thickness(0, 10, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Center,
+            ItemHeight = 36,
+            ItemWidth = Double.NaN
         };
 
         _multiSortBtn = new Button 
@@ -250,9 +272,50 @@ public class MainWindow : Window
             UpdateControlButtons();
         };
 
+        _toggleSideBarBtn = new Button
+        {
+            Content = $"☰ Side Bar: {(saGrid.IsSideBarVisible() ? "Shown" : "Hidden")}",
+            Margin = new Thickness(0, 0, 8, 0),
+            Padding = new Thickness(12, 6),
+            Height = 32,
+            MinWidth = 160,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        _toggleSideBarBtn.Click += (sender, e) =>
+        {
+            saGrid.ToggleSideBarVisible();
+            UpdateInfoText();
+            UpdateControlButtons();
+        };
+
+        _openColumnsPanelBtn = new Button
+        {
+            Content = "📋 Open Columns Panel",
+            Margin = new Thickness(0, 0, 8, 0),
+            Padding = new Thickness(12, 6),
+            Height = 32,
+            MinWidth = 160,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        _openColumnsPanelBtn.Click += (sender, e) =>
+        {
+            if (string.Equals(saGrid.GetOpenedToolPanel(), SideBarDefaultPanels.ColumnManagerId, StringComparison.OrdinalIgnoreCase))
+            {
+                saGrid.CloseToolPanel();
+            }
+            else
+            {
+                saGrid.OpenToolPanel(SideBarDefaultPanels.ColumnManagerId);
+                saGrid.SetSideBarVisible(true);
+            }
+            UpdateControlButtons();
+        };
+
         buttonPanel.Children.Add(_multiSortBtn);
         buttonPanel.Children.Add(_resetFiltersBtn);
         buttonPanel.Children.Add(_resetSortingBtn);
+        buttonPanel.Children.Add(_toggleSideBarBtn);
+        buttonPanel.Children.Add(_openColumnsPanelBtn);
         panel.Children.Add(buttonPanel);
 
         // Initialize button labels based on current state
@@ -271,6 +334,8 @@ public class MainWindow : Window
             var hasGlobalFilter = saGrid.State.GlobalFilter != null;
             var hasColumnFilters = saGrid.State.ColumnFilters?.Filters.Count > 0;
             var multiSort = saGrid.IsMultiSortEnabled() ? "ON" : "OFF";
+            var sideBarState = saGrid.IsSideBarVisible() ? "Visible" : "Hidden";
+            var activePanel = saGrid.GetOpenedToolPanel() ?? "None";
             
             // Cell selection info
             var selectedCells = saGrid.GetSelectedCells();
@@ -286,7 +351,7 @@ public class MainWindow : Window
             
             infoTextBlock.Text = $"📊 SaGrid.Advanced Stats: {visibleRows} rows | {visibleColumns}/{totalColumns} columns | " +
                                $"Multi‑Sort: {multiSort} | Global Filter: {(hasGlobalFilter ? "✅" : "❌")} | " +
-                               $"Column Filters: {(hasColumnFilters == true ? "✅" : "❌")} | " +
+                               $"Column Filters: {(hasColumnFilters == true ? "✅" : "❌")} | Side Bar: {sideBarState} ({activePanel}) | " +
                                $"🎯 {cellSelectionInfo}";
         }
     }
@@ -307,6 +372,16 @@ public class MainWindow : Window
         {
             var sc = saGrid.State.Sorting?.Columns.Count ?? 0;
             _resetSortingBtn.Content = $"↕️ Reset Sorting ({sc})";
+        }
+        if (_toggleSideBarBtn != null)
+        {
+            _toggleSideBarBtn.Content = $"☰ Side Bar: {(saGrid.IsSideBarVisible() ? "Shown" : "Hidden")}";
+        }
+        if (_openColumnsPanelBtn != null)
+        {
+            var opened = saGrid.GetOpenedToolPanel();
+            var isActive = string.Equals(opened, SideBarDefaultPanels.ColumnManagerId, StringComparison.OrdinalIgnoreCase);
+            _openColumnsPanelBtn.Content = isActive ? "📋 Close Columns Panel" : "📋 Open Columns Panel";
         }
     }
 }
