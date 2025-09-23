@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using SaGrid.Advanced.Modules;
+using SaGrid.Advanced.Context;
 
-namespace SaGrid.Modules.Selection;
+namespace SaGrid.Advanced.Selection;
 
 internal sealed class CellSelectionModule : IAdvancedModule
 {

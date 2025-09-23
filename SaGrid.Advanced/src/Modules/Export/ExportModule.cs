@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using SaGrid.Advanced.Modules;
+using SaGrid.Advanced.Context;
 
-namespace SaGrid.Modules.Export;
+namespace SaGrid.Advanced.Modules.Export;
 
 internal sealed class ExportModule : IAdvancedModule
 {

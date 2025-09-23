@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace SaGrid.Advanced.Modules;
+namespace SaGrid.Advanced.Context;
 
 /// <summary>
 /// Describes an advanced module that can extend SaGrid.Advanced capabilities.

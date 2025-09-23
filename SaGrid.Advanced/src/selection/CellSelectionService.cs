@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using SaGrid.Core;
 
-namespace SaGrid.Modules.Selection;
+namespace SaGrid.Advanced.Selection;
 
 /// <summary>
 /// Handles cell selection behaviours for SaGrid instances. Inspired by AG Grid's selection service pattern.

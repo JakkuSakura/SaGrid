@@ -2,11 +2,12 @@ using System;
 using System.Collections.Generic;
 using Avalonia.Threading;
 using SaGrid.Core;
-using SaGrid.Advanced.Modules;
+using SaGrid.Advanced.Context;
 using SaGrid.Advanced.Modules.SideBar;
-using SaGrid.Modules.Export;
-using SaGrid.Modules.Selection;
-using SaGrid.Modules.Sorting;
+using SaGrid.Advanced.Modules.StatusBar;
+using SaGrid.Advanced.Modules.Export;
+using SaGrid.Advanced.Selection;
+using SaGrid.Advanced.Modules.Sorting;
 
 namespace SaGrid;
 
@@ -20,6 +21,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     private readonly CellSelectionService _cellSelectionService;
     private readonly SortingEnhancementsService _sortingEnhancementsService;
     private readonly SideBarService _sideBarService;
+    private readonly StatusBarService _statusBarService;
 
     public SaGrid(TableOptions<TData> options) : base(options)
     {
@@ -29,7 +31,9 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _cellSelectionService = context.Resolve<CellSelectionService>();
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
         _sideBarService = context.Resolve<SideBarService>();
+        _statusBarService = context.Resolve<StatusBarService>();
         _sideBarService.EnsureDefaultPanels(this);
+        _statusBarService.EnsureDefaultWidgets(this);
     }
 
     // Constructor for test compatibility  
@@ -41,7 +45,9 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _cellSelectionService = context.Resolve<CellSelectionService>();
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
         _sideBarService = context.Resolve<SideBarService>();
+        _statusBarService = context.Resolve<StatusBarService>();
         _sideBarService.EnsureDefaultPanels(this);
+        _statusBarService.EnsureDefaultWidgets(this);
     }
 
     // Advanced filtering capabilities
@@ -554,6 +560,52 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public bool NavigateCell(CellNavigationDirection direction)
     {
         return _cellSelectionService.Navigate(this, direction);
+    }
+
+    // Status Bar API methods following AG Grid pattern
+    public StatusBarService GetStatusBarService()
+    {
+        return _statusBarService;
+    }
+
+    public bool IsStatusBarVisible()
+    {
+        return _statusBarService.IsVisible(this);
+    }
+
+    public void SetStatusBarVisible(bool visible)
+    {
+        _statusBarService.SetVisible(this, visible);
+    }
+
+    public void ToggleStatusBarVisible()
+    {
+        _statusBarService.ToggleVisible(this);
+    }
+
+    public void SetStatusBarPosition(StatusBarPosition position)
+    {
+        _statusBarService.SetPosition(this, position);
+    }
+
+    public StatusBarPosition GetStatusBarPosition()
+    {
+        return _statusBarService.GetPosition(this);
+    }
+
+    public void RegisterStatusWidget(StatusBarWidgetDefinition widget)
+    {
+        _statusBarService.RegisterWidget(this, widget);
+    }
+
+    public void UnregisterStatusWidget(string widgetId)
+    {
+        _statusBarService.UnregisterWidget(this, widgetId);
+    }
+
+    public StatusBarState GetStatusBarState()
+    {
+        return _statusBarService.GetState(this);
     }
 
 

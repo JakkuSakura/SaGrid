@@ -1,8 +1,8 @@
 using System;
-using SaGrid.Advanced.Modules;
+using SaGrid.Advanced.Context;
 using SaGrid.Advanced.Modules.SideBar;
 
-namespace SaGrid.Modules.SideBar;
+namespace SaGrid.Advanced.Modules.SideBar;
 
 internal sealed class SideBarModule : IAdvancedModule
 {

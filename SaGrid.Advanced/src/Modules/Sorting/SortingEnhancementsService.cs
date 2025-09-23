@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace SaGrid.Modules.Sorting;
+namespace SaGrid.Advanced.Modules.Sorting;
 
 /// <summary>
 /// Provides sorting-related helpers that extend the base table behaviour.

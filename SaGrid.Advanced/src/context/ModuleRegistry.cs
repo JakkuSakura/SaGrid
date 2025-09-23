@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 
-namespace SaGrid.Advanced.Modules;
+namespace SaGrid.Advanced.Context;
 
 /// <summary>
 /// Minimal module registry mirroring AG Grid's module system. Allows modules to register services and expose APIs.

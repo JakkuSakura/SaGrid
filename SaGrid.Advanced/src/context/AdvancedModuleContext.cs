@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 
-namespace SaGrid.Advanced.Modules;
+namespace SaGrid.Advanced.Context;
 
 /// <summary>
 /// Simple service registry passed to advanced modules during initialization.

@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using SaGrid.Advanced.Modules;
+using SaGrid.Advanced.Context;
 
-namespace SaGrid.Modules.Sorting;
+namespace SaGrid.Advanced.Modules.Sorting;
 
 internal sealed class SortingEnhancementsModule : IAdvancedModule
 {

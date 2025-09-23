@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using SaGrid.Core;
 
-namespace SaGrid.Modules.Export;
+namespace SaGrid.Advanced.Modules.Export;
 
 /// <summary>
 /// Handles export operations for SaGrid, mirroring AG Grid's export services.

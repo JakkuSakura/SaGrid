@@ -122,6 +122,13 @@ public class SaGridComponent<TData> : Component
             {
                 var currentGrid = Grid;
                 var selTick = _selectionSignal?.Item1();
+                
+                // Don't show footer if status bar is visible (to avoid duplicate pagination)
+                if (currentGrid.IsStatusBarVisible())
+                {
+                    return new StackPanel(); // Empty footer
+                }
+                
                 return _footerRenderer.CreateFooter(currentGrid);
             });
         }

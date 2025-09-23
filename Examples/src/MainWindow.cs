@@ -9,6 +9,7 @@ using static SolidAvalonia.Solid;
 using System.Diagnostics;
 using Avalonia.Threading;
 using SaGrid.Advanced.Modules.SideBar;
+using SaGrid.Advanced.Modules.StatusBar;
 using System;
 
 namespace Examples;
@@ -31,6 +32,7 @@ public class MainWindow : Window
     private Button _resetFiltersBtn = null!;
     private Button _resetSortingBtn = null!;
     private Button _toggleSideBarBtn = null!;
+    private Button _toggleStatusBarBtn = null!;
     private Button _openColumnsPanelBtn = null!;
     private SideBarService _sideBarService = null!;
 
@@ -196,23 +198,37 @@ public class MainWindow : Window
         };
         container.Children.Add(infoTextBlock);
 
-        // Create SaGrid.Advanced host area with side bar + table
+        // Create SaGrid.Advanced host area with side bar + table + status bar
         var sideBarHost = new SideBarHost();
         sideBarHost.Initialize(saGrid.GetSideBarService(), saGrid);
+
+        var statusBarHost = new StatusBarHost();
+        statusBarHost.Initialize(saGrid.GetStatusBarService(), saGrid);
 
         var saGridComponent = new SaGridComponent<Person>(saGrid);
 
         var tableArea = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            RowDefinitions = new RowDefinitions("*,Auto"),
             Margin = new Thickness(20, 10, 20, 20)
         };
 
+        // Side bar (left column, full height)
         tableArea.Children.Add(sideBarHost);
         Grid.SetColumn(sideBarHost, 0);
+        Grid.SetRow(sideBarHost, 0);
+        Grid.SetRowSpan(sideBarHost, 2);
 
+        // Grid component (right column, top row)
         tableArea.Children.Add(saGridComponent);
         Grid.SetColumn(saGridComponent, 1);
+        Grid.SetRow(saGridComponent, 0);
+
+        // Status bar (right column, bottom row)
+        tableArea.Children.Add(statusBarHost);
+        Grid.SetColumn(statusBarHost, 1);
+        Grid.SetRow(statusBarHost, 1);
 
         container.Children.Add(tableArea);
 
@@ -299,6 +315,22 @@ public class MainWindow : Window
             UpdateControlButtons();
         };
 
+        _toggleStatusBarBtn = new Button
+        {
+            Content = $"📊 Status Bar: {(saGrid.IsStatusBarVisible() ? "Shown" : "Hidden")}",
+            Margin = new Thickness(0, 0, 8, 0),
+            Padding = new Thickness(12, 6),
+            Height = 32,
+            MinWidth = 160,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        _toggleStatusBarBtn.Click += (sender, e) =>
+        {
+            saGrid.ToggleStatusBarVisible();
+            UpdateInfoText();
+            UpdateControlButtons();
+        };
+
         _openColumnsPanelBtn = new Button
         {
             Content = "📋 Open Columns Panel",
@@ -326,6 +358,7 @@ public class MainWindow : Window
         buttonPanel.Children.Add(_resetFiltersBtn);
         buttonPanel.Children.Add(_resetSortingBtn);
         buttonPanel.Children.Add(_toggleSideBarBtn);
+        buttonPanel.Children.Add(_toggleStatusBarBtn);
         buttonPanel.Children.Add(_openColumnsPanelBtn);
         panel.Children.Add(buttonPanel);
 
@@ -346,6 +379,7 @@ public class MainWindow : Window
             var hasColumnFilters = saGrid.State.ColumnFilters?.Filters.Count > 0;
             var multiSort = saGrid.IsMultiSortEnabled() ? "ON" : "OFF";
             var sideBarState = saGrid.IsSideBarVisible() ? "Visible" : "Hidden";
+            var statusBarState = saGrid.IsStatusBarVisible() ? "Visible" : "Hidden";
             var activePanel = saGrid.GetOpenedToolPanel() ?? "None";
             
             // Cell selection info
@@ -363,7 +397,7 @@ public class MainWindow : Window
             infoTextBlock.Text = $"📊 SaGrid.Advanced Stats: {visibleRows} rows | {visibleColumns}/{totalColumns} columns | " +
                                $"Multi‑Sort: {multiSort} | Global Filter: {(hasGlobalFilter ? "✅" : "❌")} | " +
                                $"Column Filters: {(hasColumnFilters == true ? "✅" : "❌")} | Side Bar: {sideBarState} ({activePanel}) | " +
-                               $"🎯 {cellSelectionInfo}";
+                               $"Status Bar: {statusBarState} | 🎯 {cellSelectionInfo}";
         }
     }
 
@@ -401,6 +435,10 @@ public class MainWindow : Window
         if (_toggleSideBarBtn != null)
         {
             _toggleSideBarBtn.Content = $"☰ Side Bar: {(saGrid.IsSideBarVisible() ? "Shown" : "Hidden")}";
+        }
+        if (_toggleStatusBarBtn != null)
+        {
+            _toggleStatusBarBtn.Content = $"📊 Status Bar: {(saGrid.IsStatusBarVisible() ? "Shown" : "Hidden")}";
         }
         if (_openColumnsPanelBtn != null)
         {
