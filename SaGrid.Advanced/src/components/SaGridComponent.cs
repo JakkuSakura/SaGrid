@@ -181,8 +181,9 @@ public class SaGridComponent<TData> : Component
         var sortingSignature = _saGrid.State.Sorting != null
             ? string.Join("|", _saGrid.State.Sorting.Columns.Select(c => $"{c.Id}:{c.Direction}").ToArray())
             : string.Empty;
+        var groupingSignature = string.Join("|", _saGrid.GetGroupedColumnIds());
         var multiSort = _saGrid.IsMultiSortEnabled() ? "1" : "0";
-        return $"cols={columnsSignature};sort={sortingSignature};multi={multiSort}";
+        return $"cols={columnsSignature};sort={sortingSignature};group={groupingSignature};multi={multiSort}";
     }
 
     private string ComputeFilterVersion()

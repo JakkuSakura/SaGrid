@@ -206,11 +206,23 @@ public class Table<TData> : ITable<TData>
 
     private void UpdateRowMap()
     {
+        UpdateRowMap(RowModel);
+    }
+
+    private void UpdateRowMap(RowModel<TData> model)
+    {
         _rowMap.Clear();
-        foreach (var row in RowModel.FlatRows)
+        foreach (var row in model.FlatRows)
         {
             _rowMap[row.Id] = row;
         }
+    }
+
+    internal void ReplaceFinalRowModel(RowModel<TData> rowModel)
+    {
+        PrePaginationRowModel = rowModel;
+        RowModel = rowModel;
+        UpdateRowMap(rowModel);
     }
 
     private void UpdateVisibleColumns()

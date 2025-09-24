@@ -5,6 +5,8 @@ public class Row<TData> : IRow<TData>
     private readonly Table<TData> _table;
     private readonly Dictionary<string, Cell<TData>> _cells;
     private readonly List<Row<TData>> _subRows = new();
+    private readonly Dictionary<string, object?> _aggregatedValues = new();
+    private readonly Dictionary<string, object?>? _presetValues;
     
     public string Id { get; }
     public int Index { get; }
@@ -19,8 +21,11 @@ public class Row<TData> : IRow<TData>
     public bool IsExpanded => GetIsExpanded();
     public bool IsGrouped => GetIsGrouped();
     public object? GroupingValue => GetGroupingValue();
+    public bool IsGroupRow { get; }
+    public string? GroupColumnId { get; private set; }
+    public object? GroupKey { get; private set; }
 
-    public Row(Table<TData> table, string id, int index, TData original, int depth, Row<TData>? parent)
+    public Row(Table<TData> table, string id, int index, TData original, int depth, Row<TData>? parent, Dictionary<string, object?>? presetValues = null, bool isGroupRow = false)
     {
         _table = table;
         Id = id;
@@ -28,6 +33,8 @@ public class Row<TData> : IRow<TData>
         Original = original;
         Depth = depth;
         Parent = parent;
+        IsGroupRow = isGroupRow;
+        _presetValues = presetValues;
         
         _cells = new Dictionary<string, Cell<TData>>();
         CreateCells();
@@ -39,7 +46,9 @@ public class Row<TData> : IRow<TData>
     {
         foreach (var column in _table.AllLeafColumns)
         {
-            var cell = new Cell<TData>(this, column);
+            var preset = _presetValues?.GetValueOrDefault(column.Id);
+            var isAggregated = _presetValues != null && _presetValues.ContainsKey(column.Id);
+            var cell = new Cell<TData>(this, column, preset, isAggregated);
             _cells[column.Id] = cell;
         }
     }
@@ -76,12 +85,22 @@ public class Row<TData> : IRow<TData>
 
     private bool GetIsGrouped()
     {
+        if (IsGroupRow)
+        {
+            return true;
+        }
+
         var groupingState = _table.State.Grouping ?? new GroupingState();
         return groupingState.Any();
     }
 
     private object? GetGroupingValue()
     {
+        if (GroupKey != null)
+        {
+            return GroupKey;
+        }
+
         var groupingState = _table.State.Grouping ?? new GroupingState();
         if (!groupingState.Any()) return null;
 
@@ -105,6 +124,26 @@ public class Row<TData> : IRow<TData>
     public ICell<TData> GetCell(string columnId)
     {
         return _cells.GetValueOrDefault(columnId) ?? throw new ArgumentException($"Cell not found for column: {columnId}");
+    }
+
+    public void SetGroupInfo(string columnId, object? key)
+    {
+        GroupColumnId = columnId;
+        GroupKey = key;
+    }
+
+    public void SetAggregatedValue(string columnId, object? value)
+    {
+        _aggregatedValues[columnId] = value;
+        if (_cells.TryGetValue(columnId, out var cell))
+        {
+            cell.ApplyAggregatedValue(value);
+        }
+    }
+
+    public bool TryGetAggregatedValue(string columnId, out object? value)
+    {
+        return _aggregatedValues.TryGetValue(columnId, out value);
     }
 
     public void ToggleSelected()

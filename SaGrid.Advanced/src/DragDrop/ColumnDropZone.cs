@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -6,6 +7,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Media;
 using Avalonia.Threading;
 using SaGrid.Advanced.Interactive;
+using SaGrid.Advanced.Interfaces;
 using SaGrid.Core;
 
 namespace SaGrid.Advanced.DragDrop;
@@ -221,36 +223,101 @@ public class ColumnDropZone<TData> : IDropZone
 /// </summary>
 public class GroupingDropZone<TData> : IDropZone
 {
-    private readonly Control _groupingArea;
-    private readonly ColumnInteractiveService<TData> _columnService;
+    private readonly Panel _groupingPanel;
+    private readonly IGroupingService _groupingService;
+    private readonly SaGrid<TData> _grid;
+    private readonly Visual _rootVisual;
+
+    private int _dropIndex = -1;
+    private bool _dropBefore = true;
     
-    public GroupingDropZone(Control groupingArea, ColumnInteractiveService<TData> columnService)
+    public GroupingDropZone(Panel groupingPanel,
+        IGroupingService groupingService,
+        SaGrid<TData> grid,
+        Visual rootVisual)
     {
-        _groupingArea = groupingArea;
-        _columnService = columnService;
+        _groupingPanel = groupingPanel;
+        _groupingService = groupingService;
+        _grid = grid;
+        _rootVisual = rootVisual;
     }
 
     public bool ContainsPoint(Point position)
     {
-        return _groupingArea.IsVisible && _groupingArea.Bounds.Contains(position);
+        if (!_groupingPanel.IsVisible)
+        {
+            return false;
+        }
+
+        var local = _rootVisual.TranslatePoint(position, _groupingPanel);
+        if (local == null)
+        {
+            return false;
+        }
+
+        var bounds = new Rect(_groupingPanel.Bounds.Size);
+        return bounds.Contains(local.Value);
     }
 
     public bool CanAccept(IDragSource dragSource)
     {
-        return dragSource.GetDragData() is IColumn<TData>;
+        return dragSource.GetDragData() is IColumn<TData> column && column.CanGroup;
     }
 
     public bool TryDrop(IDragSource dragSource, Point position)
     {
-        if (!CanAccept(dragSource)) return false;
-        
-        var draggedColumn = dragSource.GetDragData() as IColumn<TData>;
-        if (draggedColumn == null) return false;
+        if (!CanAccept(dragSource))
+        {
+            return false;
+        }
 
-        // For now, just show that we would group by this column
-        // In a full implementation, this would add the column to grouping
-        ShowGroupingFeedback(draggedColumn.Id);
-        
+        if (dragSource.GetDragData() is not IColumn<TData> column)
+        {
+            return false;
+        }
+
+        var local = _rootVisual.TranslatePoint(position, _groupingPanel);
+        if (local == null)
+        {
+            return false;
+        }
+
+        CalculateDropPosition(local.Value);
+
+        var groupedIds = _groupingService.GetGroupedColumnIds(_grid);
+        var insertIndex = _dropIndex >= 0 ? _dropIndex : groupedIds.Count;
+        insertIndex = Math.Clamp(insertIndex, 0, groupedIds.Count);
+
+        var existingIndex = -1;
+        for (var i = 0; i < groupedIds.Count; i++)
+        {
+            if (string.Equals(groupedIds[i], column.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                existingIndex = i;
+                break;
+            }
+        }
+
+        if (existingIndex >= 0)
+        {
+            if (existingIndex < insertIndex)
+            {
+                insertIndex -= 1;
+            }
+
+            if (existingIndex == insertIndex)
+            {
+                return false;
+            }
+
+            _groupingService.MoveGroupingColumn(_grid, column.Id, insertIndex);
+        }
+        else
+        {
+            _groupingService.AddGroupingColumn(_grid, column.Id, insertIndex);
+        }
+
+        ShowGroupingFeedback(column.Id);
         return true;
     }
 
@@ -266,40 +333,110 @@ public class GroupingDropZone<TData> : IDropZone
 
     public void OnDragOver(IDragSource dragSource, Point position)
     {
-        // Could show preview of where the grouping chip would appear
+        var local = _rootVisual.TranslatePoint(position, _groupingPanel);
+        if (local != null)
+        {
+            CalculateDropPosition(local.Value);
+        }
     }
 
     public Point GetDropIndicatorPosition(Point position)
     {
-        // For grouping zone, indicator appears in the center
-        return new Point(
-            _groupingArea.Bounds.Center.X, 
-            _groupingArea.Bounds.Top
-        );
+        var chips = GetChipControls();
+        if (chips.Count == 0)
+        {
+            var center = _groupingPanel.Bounds.Center;
+            return _groupingPanel.TranslatePoint(new Point(center.X, _groupingPanel.Bounds.Top), _rootVisual) ?? position;
+        }
+
+        var index = Math.Clamp(_dropIndex, 0, chips.Count);
+        if (index < chips.Count)
+        {
+            var target = chips[index];
+            var origin = target.TranslatePoint(new Point(0, 0), _groupingPanel) ?? new Point(0, 0);
+            var x = _dropBefore ? origin.X : origin.X + target.Bounds.Width;
+            return _groupingPanel.TranslatePoint(new Point(x, origin.Y), _rootVisual) ?? position;
+        }
+
+        var last = chips[^1];
+        var lastOrigin = last.TranslatePoint(new Point(0, 0), _groupingPanel) ?? new Point(0, 0);
+        var dropPoint = new Point(lastOrigin.X + last.Bounds.Width, lastOrigin.Y);
+        return _groupingPanel.TranslatePoint(dropPoint, _rootVisual) ?? position;
     }
 
     public double GetDropIndicatorHeight()
     {
-        return _groupingArea.Bounds.Height;
+        var chips = GetChipControls();
+        if (chips.Count > 0)
+        {
+            return chips[0].Bounds.Height;
+        }
+        return _groupingPanel.Bounds.Height;
+    }
+
+    private List<Control> GetChipControls()
+    {
+        return _groupingPanel.Children
+            .OfType<Control>()
+            .Where(c => c.Tag is string)
+            .ToList();
+    }
+
+    private void CalculateDropPosition(Point localPosition)
+    {
+        var chips = GetChipControls();
+        if (chips.Count == 0)
+        {
+            _dropIndex = 0;
+            _dropBefore = true;
+            return;
+        }
+
+        var relativeX = localPosition.X;
+
+        for (int i = 0; i < chips.Count; i++)
+        {
+            var chip = chips[i];
+            var origin = chip.TranslatePoint(new Point(0, 0), _groupingPanel) ?? new Point(0, 0);
+            var left = origin.X;
+            var right = left + chip.Bounds.Width;
+
+            if (relativeX <= left + chip.Bounds.Width / 2)
+            {
+                _dropIndex = i;
+                _dropBefore = true;
+                return;
+            }
+
+            if (relativeX <= right)
+            {
+                _dropIndex = i + 1;
+                _dropBefore = false;
+                return;
+            }
+        }
+
+        _dropIndex = chips.Count;
+        _dropBefore = false;
     }
 
     private void AddGroupingZoneHighlight()
     {
-        if (_groupingArea is Border border)
+        if (_groupingPanel.Parent is Border border)
         {
-            border.Background = new SolidColorBrush(Colors.Orange, 0.2);
-            border.BorderBrush = new SolidColorBrush(Colors.Orange);
+            border.Background = new SolidColorBrush(Colors.Moccasin, 0.3);
+            border.BorderBrush = new SolidColorBrush(Colors.OrangeRed);
             border.BorderThickness = new Thickness(2);
         }
     }
 
     private void RemoveGroupingZoneHighlight()
     {
-        if (_groupingArea is Border border)
+        if (_groupingPanel.Parent is Border border)
         {
-            border.Background = null;
-            border.BorderBrush = null;
-            border.BorderThickness = new Thickness(0);
+            border.Background = new SolidColorBrush(Colors.WhiteSmoke);
+            border.BorderBrush = Brushes.LightGray;
+            border.BorderThickness = new Thickness(1);
         }
     }
 
@@ -312,12 +449,15 @@ public class GroupingDropZone<TData> : IDropZone
             Foreground = new SolidColorBrush(Colors.Green)
         };
         
-        if (_groupingArea is Panel panel)
+        _groupingPanel.Children.Add(feedbackText);
+
+        // Remove after 1.5 seconds if still present
+        DispatcherTimer.RunOnce(() =>
         {
-            panel.Children.Add(feedbackText);
-            
-            // Remove after 2 seconds
-            DispatcherTimer.RunOnce(() => panel.Children.Remove(feedbackText), TimeSpan.FromSeconds(2));
-        }
+            if (_groupingPanel.Children.Contains(feedbackText))
+            {
+                _groupingPanel.Children.Remove(feedbackText);
+            }
+        }, TimeSpan.FromMilliseconds(1500));
     }
 }

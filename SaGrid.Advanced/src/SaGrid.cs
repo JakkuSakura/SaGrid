@@ -25,6 +25,8 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     private readonly CellSelectionService _cellSelectionService;
     private readonly SortingEnhancementsService _sortingEnhancementsService;
     private readonly SideBarService _sideBarService;
+    private readonly IAggregationService _aggregationService;
+    private readonly IGroupingService _groupingService;
     private readonly StatusBarService _statusBarService;
     private readonly IEventService _eventService;
     private readonly IClientSideRowModel<TData> _clientSideRowModel;
@@ -38,6 +40,8 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _cellSelectionService = context.Resolve<CellSelectionService>();
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
         _sideBarService = context.Resolve<SideBarService>();
+        _aggregationService = context.Resolve<IAggregationService>();
+        _groupingService = context.Resolve<IGroupingService>();
         _statusBarService = context.Resolve<StatusBarService>();
         _eventService = context.TryResolve<IEventService>(out var eventService) ? eventService : new EventService();
         _clientSideRowModel = new ClientSideRowModel<TData>(this);
@@ -62,6 +66,8 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _cellSelectionService = context.Resolve<CellSelectionService>();
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
         _sideBarService = context.Resolve<SideBarService>();
+        _aggregationService = context.Resolve<IAggregationService>();
+        _groupingService = context.Resolve<IGroupingService>();
         _statusBarService = context.Resolve<StatusBarService>();
         _eventService = context.TryResolve<IEventService>(out var eventService) ? eventService : new EventService();
         _clientSideRowModel = new ClientSideRowModel<TData>(this);
@@ -616,6 +622,60 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public StatusBarState GetStatusBarState()
     {
         return _statusBarService.GetState(this);
+    }
+
+    public IAggregationService GetAggregationService()
+    {
+        return _aggregationService;
+    }
+
+    public AggregationSnapshot GetAggregationSnapshot()
+    {
+        return _aggregationService.GetSnapshot(this);
+    }
+
+    // ================================
+    // Row Grouping API
+    // ================================
+
+    public IGroupingService GetGroupingService()
+    {
+        return _groupingService;
+    }
+
+    public IReadOnlyList<string> GetGroupedColumnIds()
+    {
+        return _groupingService.GetGroupedColumnIds(this);
+    }
+
+    public GroupingConfiguration GetGroupingConfiguration()
+    {
+        return _groupingService.GetConfiguration(this);
+    }
+
+    public void SetGrouping(IEnumerable<string> columnIds)
+    {
+        _groupingService.SetGrouping(this, columnIds);
+    }
+
+    public void AddGroupingColumn(string columnId, int? insertAtIndex = null)
+    {
+        _groupingService.AddGroupingColumn(this, columnId, insertAtIndex);
+    }
+
+    public void RemoveGroupingColumn(string columnId)
+    {
+        _groupingService.RemoveGroupingColumn(this, columnId);
+    }
+
+    public void MoveGroupingColumn(string columnId, int targetIndex)
+    {
+        _groupingService.MoveGroupingColumn(this, columnId, targetIndex);
+    }
+
+    public void ClearGrouping()
+    {
+        _groupingService.ClearGrouping(this);
     }
 
     // Advanced Grid API methods following AG Grid pattern

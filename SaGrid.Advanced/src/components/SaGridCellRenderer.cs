@@ -1,3 +1,4 @@
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -15,6 +16,8 @@ internal class SaGridCellRenderer<TData>
     public Control CreateCell(SaGrid<TData> saGrid, Row<TData> row, Column<TData> column)
     {
         var content = SaGridContentHelper<TData>.GetCellContent(row, column);
+        var firstColumnId = saGrid.VisibleLeafColumns.FirstOrDefault()?.Id;
+        var indent = column.Id == firstColumnId ? row.Depth * 16 : 0;
         
         return new Border()
             .BorderThickness(0, 0, 1, 1)
@@ -27,7 +30,7 @@ internal class SaGridCellRenderer<TData>
                     .Text(content)
                     .VerticalAlignment(VerticalAlignment.Center)
                     .HorizontalAlignment(HorizontalAlignment.Left)
-                    .Margin(new Thickness(8, 0))
+                    .Margin(new Thickness(8 + indent, 0, 0, 0))
             );
     }
 
@@ -45,6 +48,8 @@ internal class SaGridCellRenderer<TData>
             
             var background = GetCellBackground(isSelected, isActiveCell, row.Index);
             var content = SaGridContentHelper<TData>.GetCellContent(row, column);
+            var firstColumnId = currentGrid?.VisibleLeafColumns.FirstOrDefault()?.Id;
+            var indent = column.Id == firstColumnId ? row.Depth * 16 : 0;
 
             var border = new Border()
                 .BorderThickness(0, 0, 1, 1)
@@ -57,7 +62,7 @@ internal class SaGridCellRenderer<TData>
                         .Text(content)
                         .VerticalAlignment(VerticalAlignment.Center)
                         .HorizontalAlignment(HorizontalAlignment.Left)
-                        .Margin(new Thickness(8, 0))
+                        .Margin(new Thickness(8 + indent, 0, 0, 0))
                 );
 
             // Add click handler for cell selection

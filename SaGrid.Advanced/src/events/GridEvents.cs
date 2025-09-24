@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using SaGrid.Advanced.Interfaces;
 using SaGrid.Core;
 
 namespace SaGrid.Advanced.Events;
@@ -156,6 +157,34 @@ public class SortChangedEventArgs : AgEventArgs
     {
         ColumnId = columnId;
         Direction = direction;
+    }
+}
+
+/// <summary>
+/// Event arguments for grouping changes
+/// </summary>
+public class GroupingChangedEventArgs : AgEventArgs
+{
+    public IReadOnlyList<string> GroupedColumnIds { get; }
+
+    public GroupingChangedEventArgs(object source, IReadOnlyList<string> groupedColumns)
+        : base(GridEventTypes.GroupingChanged, source)
+    {
+        GroupedColumnIds = groupedColumns;
+    }
+}
+
+/// <summary>
+/// Event arguments for aggregation changes
+/// </summary>
+public class AggregationChangedEventArgs : AgEventArgs
+{
+    public AggregationSnapshot Snapshot { get; }
+
+    public AggregationChangedEventArgs(object source, AggregationSnapshot snapshot)
+        : base(GridEventTypes.AggregationChanged, source)
+    {
+        Snapshot = snapshot;
     }
 }
 

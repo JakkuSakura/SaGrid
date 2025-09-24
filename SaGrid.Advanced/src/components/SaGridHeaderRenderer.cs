@@ -54,6 +54,15 @@ internal class SaGridHeaderRenderer<TData>
 
         var headerControls = new List<Control>();
 
+        if (saGrid.Options.EnableGrouping || saGrid.GetGroupedColumnIds().Count > 0)
+        {
+            var groupingArea = CreateGroupingArea(saGrid);
+            if (groupingArea != null)
+            {
+                headerControls.Add(groupingArea);
+            }
+        }
+
         foreach (var headerGroup in saGrid.HeaderGroups)
         {
             var headerRow = new StackPanel
@@ -93,6 +102,133 @@ internal class SaGridHeaderRenderer<TData>
         return HasInteractivity
             ? CreateInteractiveHeaderCell(saGrid, column, header)
             : CreateBasicHeaderCell(saGrid, column, header);
+    }
+
+    private Control? CreateGroupingArea(SaGrid<TData> saGrid)
+    {
+        var groupingService = saGrid.GetGroupingService();
+        var groupedIds = groupingService.GetGroupedColumnIds(saGrid);
+
+        var container = new Border()
+            .BorderThickness(0, 0, 0, 1)
+            .BorderBrush(Brushes.LightGray)
+            .Background(new SolidColorBrush(Colors.WhiteSmoke))
+            .Padding(new Thickness(8, 6));
+
+        var panel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        if (groupedIds.Count == 0)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Drag columns here to create groups",
+                Foreground = Brushes.Gray,
+                FontStyle = FontStyle.Italic,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+        }
+        else
+        {
+            foreach (var columnId in groupedIds)
+            {
+                if (saGrid.GetColumn(columnId) is not Column<TData> column)
+                {
+                    continue;
+                }
+
+                var chip = CreateGroupingChip(saGrid, column);
+                panel.Children.Add(chip);
+
+                if (HasInteractivity)
+                {
+                    var dragSource = new GroupingChipDragSource<TData>(column, chip);
+                    _dragDropManager!.RegisterDragSource(dragSource);
+                    _activeDragSources.Add(dragSource);
+                }
+            }
+        }
+
+        container.Child = panel;
+
+        if (HasInteractivity)
+        {
+            var dropZone = new GroupingDropZone<TData>(panel, groupingService, saGrid, _dragDropManager!.RootVisual);
+            _dragDropManager.RegisterDropZone(dropZone);
+            _activeDropZones.Add(dropZone);
+        }
+
+        return container;
+    }
+
+    private Control CreateGroupingChip(SaGrid<TData> saGrid, Column<TData> column)
+    {
+        var text = SaGridContentHelper<TData>.GetHeaderContent(column);
+
+        var label = new TextBlock
+        {
+            Text = text,
+            Margin = new Thickness(12, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        var closeButton = new Button
+        {
+            Content = "✕",
+            Width = 18,
+            Height = 18,
+            Padding = new Thickness(0),
+            FontSize = 10,
+            Background = Brushes.Transparent,
+            BorderBrush = null,
+            Cursor = new Cursor(StandardCursorType.Hand),
+            ToolTip = $"Remove grouping by {text}"
+        };
+
+        closeButton.Click += (s, e) => saGrid.RemoveGroupingColumn(column.Id);
+
+        var content = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 4,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        content.Children.Add(label);
+        content.Children.Add(closeButton);
+
+        var chip = new Border
+        {
+            Background = new SolidColorBrush(Colors.LightSteelBlue, 0.9),
+            BorderBrush = Brushes.SteelBlue,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(12),
+            Padding = new Thickness(4, 2),
+            Child = content,
+            Tag = column.Id,
+            Cursor = new Cursor(StandardCursorType.Hand)
+        };
+
+        chip.PointerEntered += (s, e) =>
+        {
+            if (s is Border border)
+            {
+                border.Background = new SolidColorBrush(Colors.LightSkyBlue, 0.95);
+            }
+        };
+
+        chip.PointerExited += (s, e) =>
+        {
+            if (s is Border border)
+            {
+                border.Background = new SolidColorBrush(Colors.LightSteelBlue, 0.9);
+            }
+        };
+
+        return chip;
     }
 
     private Control CreateBasicHeaderCell(SaGrid<TData> saGrid, Column<TData> column, IHeader<TData> header)

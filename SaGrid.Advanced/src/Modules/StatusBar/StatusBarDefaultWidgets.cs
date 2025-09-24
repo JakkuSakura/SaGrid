@@ -1,10 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using SaGrid;
+using SaGrid.Advanced.Events;
+using SaGrid.Advanced.Interfaces;
 
 namespace SaGrid.Advanced.Modules.StatusBar;
 
@@ -13,6 +19,7 @@ public static class StatusBarDefaultWidgets
     public const string TotalRowsId = "totalRows";
     public const string SelectedRowsId = "selectedRows";
     public const string FilteredRowsId = "filteredRows";
+    public const string AggregationSummaryId = "aggregationSummary";
     public const string PaginationId = "pagination";
 
     public static IReadOnlyList<StatusBarWidgetDefinition> CreateDefaultWidgets<TData>()
@@ -22,6 +29,7 @@ public static class StatusBarDefaultWidgets
             new StatusBarWidgetDefinition(TotalRowsId, "Total Rows", grid => new TotalRowsWidget<TData>((SaGrid<TData>)grid), 100),
             new StatusBarWidgetDefinition(SelectedRowsId, "Selected", grid => new SelectedRowsWidget<TData>((SaGrid<TData>)grid), 200),
             new StatusBarWidgetDefinition(FilteredRowsId, "Filtered", grid => new FilteredRowsWidget<TData>((SaGrid<TData>)grid), 300),
+            new StatusBarWidgetDefinition(AggregationSummaryId, "Aggregations", grid => new AggregationSummaryWidget<TData>((SaGrid<TData>)grid), 350),
             new StatusBarWidgetDefinition(PaginationId, "Pagination", grid => new PaginationWidget<TData>((SaGrid<TData>)grid), 400)
         };
     }
@@ -132,6 +140,75 @@ public static class StatusBarDefaultWidgets
             {
                 IsVisible = false;
             }
+        }
+    }
+
+    private sealed class AggregationSummaryWidget<TData> : UserControl
+    {
+        private readonly SaGrid<TData> _grid;
+        private readonly TextBlock _textBlock;
+        private readonly Action<AggregationChangedEventArgs> _handler;
+
+        public AggregationSummaryWidget(SaGrid<TData> grid)
+        {
+            _grid = grid;
+            _textBlock = new TextBlock
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 4),
+                FontSize = 12,
+                Foreground = Brushes.MediumSeaGreen
+            };
+
+            Content = _textBlock;
+            _handler = OnAggregationChanged;
+
+            AttachedToVisualTree += OnAttachedToVisualTree;
+            DetachedFromVisualTree += OnDetachedFromVisualTree;
+        }
+
+        private void OnAggregationChanged(AggregationChangedEventArgs args)
+        {
+            Dispatcher.UIThread.Post(() => UpdateDisplay(args.Snapshot));
+        }
+
+        private void OnAttachedToVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
+        {
+            _grid.AddEventListener<AggregationChangedEventArgs>(GridEventTypes.AggregationChanged, _handler);
+            UpdateDisplay(_grid.GetAggregationSnapshot());
+        }
+
+        private void UpdateDisplay(AggregationSnapshot snapshot)
+        {
+            if (snapshot.ColumnTotals.Count == 0)
+            {
+                IsVisible = false;
+                return;
+            }
+
+            IsVisible = true;
+            var formatted = snapshot.ColumnTotals
+                .Select(kvp => $"{kvp.Key}: {FormatValue(kvp.Value)}")
+                .ToArray();
+
+            _textBlock.Text = string.Join(" | ", formatted);
+        }
+
+        private static string FormatValue(object? value)
+        {
+            return value switch
+            {
+                null => "-",
+                decimal d => d.ToString("N2", CultureInfo.InvariantCulture),
+                double dbl => dbl.ToString("N2", CultureInfo.InvariantCulture),
+                float flt => flt.ToString("N2", CultureInfo.InvariantCulture),
+                _ => value.ToString() ?? "-"
+            };
+        }
+
+        private void OnDetachedFromVisualTree(object? sender, VisualTreeAttachmentEventArgs e)
+        {
+            _grid.RemoveEventListener<AggregationChangedEventArgs>(GridEventTypes.AggregationChanged, _handler);
         }
     }
 

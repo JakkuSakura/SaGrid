@@ -7,27 +7,27 @@ public class Cell<TData> : ICell<TData>
     public string Id { get; }
     public Column<TData> Column { get; }
     public Row<TData> Row { get; }
-    public object? Value { get; }
-    public object? RenderValue { get; }
+    public object? Value { get; private set; }
+    public object? RenderValue { get; private set; }
     public bool IsGrouped { get; }
-    public bool IsAggregated { get; }
-    public bool IsPlaceholder { get; }
+    public bool IsAggregated { get; private set; }
+    public bool IsPlaceholder { get; private set; }
 
     IColumn<TData> ICell<TData>.Column => Column;
     IRow<TData> ICell<TData>.Row => Row;
 
-    public Cell(Row<TData> row, Column<TData> column)
+    public Cell(Row<TData> row, Column<TData> column, object? presetValue = null, bool isAggregated = false, bool isPlaceholder = false)
     {
         Row = row;
         Column = column;
         Id = $"{row.Id}_{column.Id}";
 
-        Value = GetCellValue();
-        RenderValue = Value; // TODO: Implement render value logic
+        Value = presetValue ?? GetCellValue();
+        RenderValue = Value;
 
-        IsGrouped = row.IsGrouped && column.IsGrouped;
-        IsAggregated = false; // TODO: Implement aggregation logic
-        IsPlaceholder = false; // TODO: Implement placeholder logic
+        IsGrouped = row.IsGroupRow || (row.IsGrouped && column.IsGrouped);
+        IsAggregated = isAggregated;
+        IsPlaceholder = isPlaceholder;
     }
 
     private object? GetCellValue()
@@ -111,17 +111,25 @@ public class Cell<TData> : ICell<TData>
 
         return null;
     }
+
+    public void ApplyAggregatedValue(object? value)
+    {
+        Value = value;
+        RenderValue = value;
+        IsAggregated = true;
+    }
 }
 
 public class Cell<TData, TValue> : Cell<TData>, ICell<TData, TValue>
 {
     public new Column<TData, TValue> Column { get; }
-    public new TValue Value { get; }
-    public new TValue RenderValue { get; }
+    public new TValue Value { get; private set; }
+    public new TValue RenderValue { get; private set; }
 
     IColumn<TData, TValue> ICell<TData, TValue>.Column => Column;
 
-    public Cell(Row<TData> row, Column<TData, TValue> column) : base(row, column)
+    public Cell(Row<TData> row, Column<TData, TValue> column, object? presetValue = null, bool isAggregated = false, bool isPlaceholder = false)
+        : base(row, column, presetValue, isAggregated, isPlaceholder)
     {
         Column = column;
         // 对于泛型列可直接使用列的 AccessorFn 以避免二次反射
@@ -143,5 +151,20 @@ public class Cell<TData, TValue> : Cell<TData>, ICell<TData, TValue>
             Value = baseVal is TValue tv ? tv : default!;
         }
         RenderValue = Value;
+    }
+
+    public new void ApplyAggregatedValue(object? value)
+    {
+        base.ApplyAggregatedValue(value);
+        if (value is TValue typed)
+        {
+            Value = typed;
+            RenderValue = typed;
+        }
+        else
+        {
+            Value = default!;
+            RenderValue = default!;
+        }
     }
 }

@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
+using SaGrid.Advanced.Events;
 using SaGrid.Advanced.Interfaces;
 using SaGrid.Core;
+using SaGrid;
 
 namespace SaGrid.Advanced.RowModel;
 
@@ -12,15 +15,21 @@ namespace SaGrid.Advanced.RowModel;
 /// </summary>
 public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
 {
+    private readonly SaGrid<TData> _grid;
     private readonly Table<TData> _table;
+    private readonly IAggregationService _aggregationService;
     private List<Row<TData>> _rootRows = new();
     private List<Row<TData>> _filteredRows = new();
     private List<Row<TData>> _sortedRows = new();
+    private List<Row<TData>> _groupTopLevelRows = new();
+    private List<Row<TData>> _groupFlatRows = new();
     private List<Row<TData>> _finalRows = new();
 
-    public ClientSideRowModel(Table<TData> table)
+    public ClientSideRowModel(SaGrid<TData> grid)
     {
-        _table = table ?? throw new ArgumentNullException(nameof(table));
+        _grid = grid ?? throw new ArgumentNullException(nameof(grid));
+        _table = grid;
+        _aggregationService = grid.GetAggregationService();
     }
 
     public IReadOnlyList<Row<TData>> RootRows => _rootRows.AsReadOnly();
@@ -42,8 +51,7 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
 
     public int GetTopLevelRowCount()
     {
-        // For non-grouped data, same as row count
-        return GetRowCount();
+        return _groupTopLevelRows.Count > 0 ? _groupTopLevelRows.Count : GetRowCount();
     }
 
     public bool IsEmpty()
@@ -98,15 +106,21 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
             case ClientSideRowModelStage.Everything:
                 ExecuteFilterStage();
                 ExecuteSortStage();
+                ExecuteGroupStage();
+                ExecuteAggregateStage();
                 ExecuteMapStage();
                 break;
             case ClientSideRowModelStage.Filter:
                 ExecuteFilterStage();
                 ExecuteSortStage();
+                ExecuteGroupStage();
+                ExecuteAggregateStage();
                 ExecuteMapStage();
                 break;
             case ClientSideRowModelStage.Sort:
                 ExecuteSortStage();
+                ExecuteGroupStage();
+                ExecuteAggregateStage();
                 ExecuteMapStage();
                 break;
             case ClientSideRowModelStage.Map:
@@ -114,6 +128,7 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
                 break;
             case ClientSideRowModelStage.Group:
                 ExecuteGroupStage();
+                ExecuteAggregateStage();
                 break;
             case ClientSideRowModelStage.Aggregate:
                 ExecuteAggregateStage();
@@ -148,7 +163,12 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
 
     public IReadOnlyList<Row<TData>>? GetTopLevelRows()
     {
-        return _finalRows.AsReadOnly();
+        if (_groupTopLevelRows.Count > 0)
+        {
+            return new ReadOnlyCollection<Row<TData>>(_groupTopLevelRows);
+        }
+
+        return new ReadOnlyCollection<Row<TData>>(_finalRows);
     }
 
     public bool IsRowDataLoaded()
@@ -233,23 +253,38 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
 
     private void ExecuteMapStage()
     {
-        // Map stage typically handles final row mapping and pagination
-        var paginatedModel = _table.RowModel;
-        _finalRows = paginatedModel.Rows.ToList();
+        var currentModel = _table.RowModel;
+        _finalRows = currentModel.Rows.ToList();
     }
 
     private void ExecuteGroupStage()
     {
-        // Group stage - would implement grouping logic here
-        // For now, just pass through
-        _finalRows = _sortedRows.ToList();
+        var computation = _aggregationService.BuildAggregationModel(_grid, _table.PreSortedRowModel.Rows);
+        _grid.DispatchEvent(GridEventTypes.AggregationChanged, new AggregationChangedEventArgs(_grid, computation.Snapshot));
+
+        if (computation.RowModel != null)
+        {
+            _table.ReplaceFinalRowModel(computation.RowModel);
+            _groupTopLevelRows = computation.RowModel.Rows.ToList();
+            _groupFlatRows = computation.RowModel.FlatRows.ToList();
+        }
+        else
+        {
+            _groupTopLevelRows = _sortedRows.ToList();
+            _groupFlatRows = _sortedRows.ToList();
+        }
     }
 
     private void ExecuteAggregateStage()
     {
-        // Aggregate stage - would implement aggregation logic here
-        // For now, just pass through
-        _finalRows = _sortedRows.ToList();
+        if (_groupFlatRows.Count > 0)
+        {
+            _finalRows = _groupFlatRows.ToList();
+        }
+        else
+        {
+            _finalRows = _sortedRows.ToList();
+        }
     }
 
     public void SetRootRows(IEnumerable<Row<TData>> rows)

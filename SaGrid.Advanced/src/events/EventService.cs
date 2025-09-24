@@ -184,4 +184,8 @@ public static class GridEventTypes
 
     // Model events
     public const string ModelUpdated = "modelUpdated";
+
+    // Grouping and aggregation events
+    public const string GroupingChanged = "groupingChanged";
+    public const string AggregationChanged = "aggregationChanged";
 }
