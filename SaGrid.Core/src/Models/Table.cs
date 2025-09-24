@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Reflection;
 
 namespace SaGrid.Core;
@@ -8,6 +9,7 @@ public class Table<TData> : ITable<TData>
     private readonly Dictionary<string, Column<TData>> _columnMap = new();
     private readonly Dictionary<string, Row<TData>> _rowMap = new();
     private readonly List<ITableFeature<TData>> _features = new();
+    private readonly Dictionary<string, int> _initialColumnOrder = new();
     private TableState<TData> _state;
 
     public TableOptions<TData> Options { get; }
@@ -90,6 +92,7 @@ public class Table<TData> : ITable<TData>
             }
 
             allColumns.Add(column);
+            _initialColumnOrder[column.Id] = _initialColumnOrder.Count;
 
             if (columnDef is GroupColumnDef<TData> groupDef)
             {
@@ -214,10 +217,10 @@ public class Table<TData> : ITable<TData>
     {
         var visibilityState = State.ColumnVisibility ?? new ColumnVisibilityState();
 
-        VisibleLeafColumns = AllLeafColumns
-            .Where(column => visibilityState.GetValueOrDefault(column.Id, true))
-            .ToList()
-            .AsReadOnly();
+        var visibleColumns = AllLeafColumns
+            .Where(column => visibilityState.GetValueOrDefault(column.Id, true));
+
+        VisibleLeafColumns = OrderColumnsByState(visibleColumns);
     }
 
     private void UpdateHeaderGroups()
@@ -229,8 +232,10 @@ public class Table<TData> : ITable<TData>
 
         for (int depth = 0; depth <= maxDepth; depth++)
         {
-            var headers = AllColumns
-                .Where(c => c.Depth == depth && c.IsVisible)
+            var orderedColumns = OrderColumnsByState(
+                AllColumns.Where(c => c.Depth == depth && c.IsVisible));
+
+            var headers = orderedColumns
                 .Select(c => new Header<TData>(c, depth))
                 .Cast<Header<TData>>()
                 .ToList();
@@ -246,6 +251,66 @@ public class Table<TData> : ITable<TData>
         FooterGroups = footerGroups.AsReadOnly();
     }
 
+    private IReadOnlyList<Column<TData>> OrderColumnsByState(IEnumerable<Column<TData>> columns)
+    {
+        var columnList = columns.ToList();
+        if (columnList.Count == 0)
+        {
+            return columnList.AsReadOnly();
+        }
+
+        var columnOrder = _state.ColumnOrder?.Order;
+        if (columnOrder == null || columnOrder.Count == 0)
+        {
+            return columnList
+                .OrderBy(c => _initialColumnOrder.GetValueOrDefault(c.Id))
+                .ToList()
+                .AsReadOnly();
+        }
+
+        var orderLookup = columnOrder
+            .Select((id, index) => new { id, index })
+            .ToDictionary(x => x.id, x => x.index);
+
+        return columnList
+            .Select((column, originalIndex) => new
+            {
+                Column = column,
+                OrderIndex = TryGetStateOrderIndex(column, orderLookup),
+                FallbackIndex = _initialColumnOrder.GetValueOrDefault(column.Id, originalIndex),
+                OriginalIndex = originalIndex
+            })
+            .OrderBy(x => x.OrderIndex.HasValue ? 0 : 1)
+            .ThenBy(x => x.OrderIndex ?? int.MaxValue)
+            .ThenBy(x => x.FallbackIndex)
+            .ThenBy(x => x.OriginalIndex)
+            .Select(x => x.Column)
+            .ToList()
+            .AsReadOnly();
+    }
+
+    private int? TryGetStateOrderIndex(Column<TData> column, Dictionary<string, int> orderLookup)
+    {
+        if (orderLookup.TryGetValue(column.Id, out var index))
+        {
+            return index;
+        }
+
+        var leafIndexes = column.LeafColumns
+            .Where(leaf => leaf.IsVisible)
+            .Select(leaf => orderLookup.TryGetValue(leaf.Id, out var leafIndex) ? (int?)leafIndex : null)
+            .Where(value => value.HasValue)
+            .Select(value => value!.Value)
+            .ToList();
+
+        if (leafIndexes.Count == 0)
+        {
+            return null;
+        }
+
+        return leafIndexes.Min();
+    }
+
     public void SetState(TableState<TData> state)
     {
         var oldState = _state;
@@ -258,7 +323,10 @@ public class Table<TData> : ITable<TData>
             feature.OnStateChange(this, state);
         }
 
-        if (!ReferenceEquals(oldState.ColumnVisibility, state.ColumnVisibility))
+        var visibilityChanged = !ReferenceEquals(oldState.ColumnVisibility, state.ColumnVisibility);
+        var orderChanged = !ReferenceEquals(oldState.ColumnOrder, state.ColumnOrder);
+
+        if (visibilityChanged || orderChanged)
         {
             UpdateVisibleColumns();
             UpdateHeaderGroups();

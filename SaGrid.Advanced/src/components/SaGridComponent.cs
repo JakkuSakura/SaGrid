@@ -4,6 +4,8 @@ using Avalonia.Media;
 using Avalonia.Markup.Declarative;
 using SolidAvalonia;
 using SaGrid.Core;
+using SaGrid.Advanced;
+using SaGrid.Advanced.DragDrop;
 using static SolidAvalonia.Solid;
 using Avalonia;
 using Avalonia.Input;
@@ -37,6 +39,8 @@ public class SaGridComponent<TData> : Component
     private readonly SaGridHeaderRenderer<TData> _headerRenderer;
     private readonly SaGridBodyRenderer<TData> _bodyRenderer;
     private readonly SaGridFooterRenderer<TData> _footerRenderer;
+    private DragDropManager<TData>? _dragDropManager;
+    private DragValidationService<TData>? _dragValidationService;
 
     public SaGrid<TData> Grid => _gridSignal?.Item1() ?? throw new InvalidOperationException("Grid not initialized. Call Build() first.");
 
@@ -88,6 +92,8 @@ public class SaGridComponent<TData> : Component
                 RowDefinitions = new RowDefinitions("Auto,*,Auto")
             };
 
+            EnsureDragDropInfrastructure();
+
             _headerContainer = new StackPanel
             {
                 Orientation = Orientation.Vertical
@@ -135,6 +141,22 @@ public class SaGridComponent<TData> : Component
         return _rootBorder!;
     }
 
+    private void EnsureDragDropInfrastructure()
+    {
+        if (_rootGrid == null)
+        {
+            return;
+        }
+
+        _dragValidationService ??= new DragValidationService<TData>(_saGrid);
+        _dragDropManager ??= new DragDropManager<TData>(_saGrid.GetEventService(), _rootGrid, _dragValidationService);
+
+        if (_dragDropManager != null)
+        {
+            _headerRenderer.EnableInteractivity(_dragDropManager, _saGrid.GetColumnInteractiveService());
+        }
+    }
+
     private void HandleHeaderStateChanges()
     {
         var newStructureVersion = ComputeHeaderStructureVersion();
@@ -175,6 +197,8 @@ public class SaGridComponent<TData> : Component
         {
             return;
         }
+
+        EnsureDragDropInfrastructure();
 
         var header = _headerRenderer.CreateHeader(_saGrid, null, null);
         if (header is Control hdrCtrl)

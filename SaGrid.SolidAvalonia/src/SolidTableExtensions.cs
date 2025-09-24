@@ -250,22 +250,31 @@ public static class SolidTableExtensions
             .Content(solidTable.GetHeaderContent(header))
             .Background(header.Column.SortDirection.HasValue
                 ? Brushes.LightYellow
-                : Brushes.LightBlue);
+                : Brushes.LightBlue)
+            .Cursor(new Cursor(StandardCursorType.Hand));
 
-        // Add basic drag detection (simplified with double-click)
+        // Visual feedback for draggable header
+        headerButton.PointerEntered += (s, e) =>
+        {
+            if (s is Button btn)
+                btn.Background = new SolidColorBrush(Colors.LightCyan);
+        };
 
-        // Simplified drag handling - just use click for now
+        headerButton.PointerExited += (s, e) =>
+        {
+            if (s is Button btn)
+                btn.Background = header.Column.SortDirection.HasValue
+                    ? Brushes.LightYellow
+                    : Brushes.LightBlue;
+        };
+
+        // Add tooltip to indicate draggable
+        ToolTip.SetTip(headerButton, "Drag to reorder column");
+
+        // Click handler for basic interaction
         headerButton.OnClick(_ =>
         {
             onMove?.Invoke(header.Column.Id, 0);
-            
-            // Column move functionality requires SaGrid.Advanced
-            // if (solidTable.Table is SaGrid<TData> saGrid)
-            // {
-            //     var currentIndex = solidTable.Table.AllLeafColumns.ToList().FindIndex(c => c.Id == header.Column.Id);
-            //     var newIndex = (currentIndex + 1) % solidTable.Table.AllLeafColumns.Count();
-            //     saGrid.MoveColumn(header.Column.Id, newIndex);
-            // }
         });
 
         return headerButton;
