@@ -25,6 +25,9 @@ public class ColumnDropZone<TData> : IDropZone
     // Drop position calculation
     private int _dropIndex = -1;
     private bool _dropBefore = true;
+    private string? _targetPinnedArea;
+    private bool _isDropValid;
+    private IDragSource? _currentDragSource;
     
     public ColumnDropZone(Panel headerContainer, ColumnInteractiveService<TData> columnService, Table<TData> table, Visual rootVisual)
     {
@@ -71,16 +74,21 @@ public class ColumnDropZone<TData> : IDropZone
             return false;
         }
 
+        _currentDragSource = dragSource;
         CalculateDropPosition(localPoint.Value);
-        
-        if (_dropIndex >= 0)
+
+        if (_dropIndex < 0 || !_isDropValid)
         {
-            // Perform the column move
-            var success = _columnService.MoveColumn(draggedColumn.Id, _dropIndex);
-            return success;
+            return false;
         }
 
-        return false;
+        var moved = _columnService.MoveColumn(draggedColumn.Id, _dropIndex, _targetPinnedArea);
+        if (moved)
+        {
+            _currentDragSource = null;
+        }
+
+        return moved;
     }
 
     public void OnDragEnter(IDragSource dragSource)
@@ -88,6 +96,7 @@ public class ColumnDropZone<TData> : IDropZone
         if (CanAccept(dragSource))
         {
             // Add visual feedback for valid drop zone
+            _currentDragSource = dragSource;
             AddDropZoneHighlight();
         }
     }
@@ -96,16 +105,20 @@ public class ColumnDropZone<TData> : IDropZone
     {
         // Remove visual feedback
         RemoveDropZoneHighlight();
+        _currentDragSource = null;
+        _isDropValid = false;
     }
 
     public void OnDragOver(IDragSource dragSource, Point position)
     {
         if (CanAccept(dragSource))
         {
+            _currentDragSource = dragSource;
             var localPoint = _rootVisual.TranslatePoint(position, _headerContainer);
             if (localPoint != null)
             {
                 CalculateDropPosition(localPoint.Value);
+                UpdateDropZoneHighlight();
             }
         }
     }
@@ -170,12 +183,16 @@ public class ColumnDropZone<TData> : IDropZone
         {
             _dropIndex = 0;
             _dropBefore = true;
+            _targetPinnedArea = null;
+            _isDropValid = true;
             return;
         }
 
         var headerChildren = _headerContainer.Children.Cast<Control>().ToList();
         var relativeX = localPosition.X;
-        
+        _dropIndex = headerChildren.Count;
+        _dropBefore = false;
+
         for (int i = 0; i < headerChildren.Count; i++)
         {
             var header = headerChildren[i];
@@ -186,23 +203,20 @@ public class ColumnDropZone<TData> : IDropZone
 
             if (relativeX <= left + width / 2)
             {
-                // Drop before this header
                 _dropIndex = i;
                 _dropBefore = true;
-                return;
+                break;
             }
             else if (relativeX <= right)
             {
-                // Drop after this header
                 _dropIndex = i + 1;
                 _dropBefore = false;
-                return;
+                break;
             }
         }
-        
-        // Drop at the end
-        _dropIndex = headerChildren.Count;
-        _dropBefore = false;
+
+        _targetPinnedArea = ResolveTargetPinnedArea(headerChildren, _dropIndex, _dropBefore);
+        _isDropValid = EvaluateDropValidity(headerChildren, _dropIndex, _targetPinnedArea);
     }
 
     private void AddDropZoneHighlight()
@@ -215,6 +229,57 @@ public class ColumnDropZone<TData> : IDropZone
     {
         // Remove visual feedback
         _headerContainer.Background = null;
+        _isDropValid = false;
+        _targetPinnedArea = null;
+    }
+
+    private void UpdateDropZoneHighlight()
+    {
+        if (_isDropValid)
+        {
+            _headerContainer.Background = new SolidColorBrush(Colors.LightGreen, 0.12);
+        }
+        else
+        {
+            _headerContainer.Background = new SolidColorBrush(Colors.IndianRed, 0.15);
+        }
+    }
+
+    private string? ResolveTargetPinnedArea(List<Control> headerChildren, int dropIndex, bool dropBefore)
+    {
+        string? pinned = null;
+
+        string? ResolveFromControl(Control control)
+        {
+            if (control.Tag is string id)
+            {
+                return _columnService.GetColumnPinnedArea(id);
+            }
+            return null;
+        }
+
+        if (dropIndex > 0 && dropBefore && dropIndex - 1 < headerChildren.Count)
+        {
+            pinned = ResolveFromControl(headerChildren[dropIndex - 1]);
+        }
+        else if (dropIndex < headerChildren.Count)
+        {
+            pinned = ResolveFromControl(headerChildren[dropIndex]);
+        }
+
+        pinned ??= ResolveFromControl(headerChildren.Last());
+        return pinned;
+    }
+
+    private bool EvaluateDropValidity(List<Control> headerChildren, int dropIndex, string? pinnedArea)
+    {
+        if (_currentDragSource?.GetDragData() is not IColumn<TData> column)
+        {
+            return false;
+        }
+
+        var displayIndex = Math.Clamp(dropIndex, 0, headerChildren.Count);
+        return _columnService.CanMoveColumn(column.Id, displayIndex, pinnedArea);
     }
 }
 

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using SaGrid.Core;
 using SaGrid.Advanced.Context;
@@ -38,11 +40,18 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     private readonly IEventService _eventService;
     private readonly IClientSideRowModel<TData> _clientSideRowModel;
     private readonly ColumnInteractiveService<TData> _columnInteractiveService;
+    private readonly IServerSideRowModel<TData>? _serverSideRowModel;
+    private readonly RowModelType _rowModelType;
+    private readonly int _serverSideBlockSize;
+
+    internal event EventHandler? RowDataChanged;
 
     public SaGrid(TableOptions<TData> options) : base(options)
     {
         SaGridModules.EnsureInitialized();
         var context = ModuleRegistry.Context;
+        _rowModelType = ResolveRowModelType(options);
+        _serverSideBlockSize = ResolveServerBlockSize(options);
         _exportService = context.Resolve<ExportService>();
         _cellSelectionService = context.Resolve<CellSelectionService>();
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
@@ -58,6 +67,15 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _batchEditManager = _cellEditorService.GetBatchManager(this);
         _clientSideRowModel = new ClientSideRowModel<TData>(this);
         _columnInteractiveService = new ColumnInteractiveService<TData>(this, _eventService);
+        if (_rowModelType == RowModelType.ServerSide)
+        {
+            _serverSideRowModel = new ServerSideRowModel<TData>(this, _serverSideBlockSize);
+            _serverSideRowModel.RowsChanged += OnServerRowsChanged;
+        }
+        else
+        {
+            _serverSideRowModel = null;
+        }
         
         _sideBarService.EnsureDefaultPanels(this);
         if (_filterService is FilterService filterServiceImpl)
@@ -66,8 +84,10 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         }
         _statusBarService.EnsureDefaultWidgets(this);
         
-        // Initialize the client-side row model
-        _clientSideRowModel.Start();
+        if (_rowModelType == RowModelType.ClientSide)
+        {
+            _clientSideRowModel.Start();
+        }
         
         // Emit grid ready event
         _eventService.DispatchEvent(GridEventTypes.GridReady, new GridReadyEventArgs(this));
@@ -78,6 +98,8 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     {
         SaGridModules.EnsureInitialized();
         var context = ModuleRegistry.Context;
+        _rowModelType = ResolveRowModelType(table.Options);
+        _serverSideBlockSize = ResolveServerBlockSize(table.Options);
         _exportService = context.Resolve<ExportService>();
         _cellSelectionService = context.Resolve<CellSelectionService>();
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
@@ -93,6 +115,15 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _batchEditManager = _cellEditorService.GetBatchManager(this);
         _clientSideRowModel = new ClientSideRowModel<TData>(this);
         _columnInteractiveService = new ColumnInteractiveService<TData>(this, _eventService);
+        if (_rowModelType == RowModelType.ServerSide)
+        {
+            _serverSideRowModel = new ServerSideRowModel<TData>(this, _serverSideBlockSize);
+            _serverSideRowModel.RowsChanged += OnServerRowsChanged;
+        }
+        else
+        {
+            _serverSideRowModel = null;
+        }
         
         _sideBarService.EnsureDefaultPanels(this);
         if (_filterService is FilterService filterServiceImpl)
@@ -101,8 +132,10 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         }
         _statusBarService.EnsureDefaultWidgets(this);
         
-        // Initialize the client-side row model
-        _clientSideRowModel.Start();
+        if (_rowModelType == RowModelType.ClientSide)
+        {
+            _clientSideRowModel.Start();
+        }
         
         // Emit grid ready event
         _eventService.DispatchEvent(GridEventTypes.GridReady, new GridReadyEventArgs(this));
@@ -150,6 +183,21 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public string ExportToJson()
     {
         return _exportService.ExportToJson(this);
+    }
+
+    public Task<byte[]> ExportToExcelAsync()
+    {
+        return _exportService.ExportToExcelAsync(this);
+    }
+
+    public byte[] ExportToExcel()
+    {
+        return _exportService.ExportToExcel(this);
+    }
+
+    public string BuildClipboardData(ClipboardExportFormat format = ClipboardExportFormat.TabDelimited, bool includeHeaders = true)
+    {
+        return _exportService.BuildClipboardData(this, format, includeHeaders);
     }
 
     public ICellEditorService<TData> GetEditingService()
@@ -698,9 +746,52 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _onUIUpdate?.Invoke();
     }
 
+    private void RaiseModelUpdated(bool newData)
+    {
+        RowDataChanged?.Invoke(this, EventArgs.Empty);
+        ScheduleUIUpdate();
+        _eventService.DispatchEvent(GridEventTypes.ModelUpdated, new ModelUpdatedEventArgs(this, newData));
+    }
+
     public void SelectCell(int rowIndex, string columnId, bool addToSelection = false)
     {
         _cellSelectionService.SelectCell(this, rowIndex, columnId, addToSelection);
+    }
+
+    private static RowModelType ResolveRowModelType(TableOptions<TData> options)
+    {
+        if (options.Meta != null && options.Meta.TryGetValue("rowModelType", out var value))
+        {
+            if (value is RowModelType typed)
+            {
+                return typed;
+            }
+
+            if (value is string text && Enum.TryParse<RowModelType>(text, true, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        return RowModelType.ClientSide;
+    }
+
+    private static int ResolveServerBlockSize(TableOptions<TData> options)
+    {
+        if (options.Meta != null && options.Meta.TryGetValue("serverSideBlockSize", out var value))
+        {
+            if (value is int i && i > 0)
+            {
+                return i;
+            }
+
+            if (value is string text && int.TryParse(text, out var parsed) && parsed > 0)
+            {
+                return parsed;
+            }
+        }
+
+        return 100;
     }
 
     public void SelectCellRange(int startRowIndex, string startColumnId, int endRowIndex, string endColumnId)
@@ -863,6 +954,30 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         return _clientSideRowModel;
     }
 
+    public RowModelType GetRowModelType()
+    {
+        return _rowModelType;
+    }
+
+    public IServerSideRowModel<TData>? GetServerSideRowModel()
+    {
+        return _serverSideRowModel;
+    }
+
+    public void SetServerSideDataSource(IServerSideDataSource<TData> dataSource, bool refresh = true)
+    {
+        if (_rowModelType != RowModelType.ServerSide || _serverSideRowModel == null)
+        {
+            throw new InvalidOperationException("Server-side data sources can only be configured when using the server-side row model.");
+        }
+
+        _serverSideRowModel.SetDataSource(dataSource, refresh);
+        if (refresh)
+        {
+            RaiseModelUpdated(true);
+        }
+    }
+
     /// <summary>
     /// Add event listener for typed events
     /// </summary>
@@ -893,8 +1008,16 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public void RefreshModel(RefreshModelParams? parameters = null)
     {
         parameters ??= new RefreshModelParams(ClientSideRowModelStage.Everything);
+
+        if (_rowModelType == RowModelType.ServerSide)
+        {
+            _serverSideRowModel?.Refresh(ServerSideRefreshMode.Full, parameters.RowDataUpdated || parameters.NewData);
+            RaiseModelUpdated(parameters.NewData || parameters.RowDataUpdated);
+            return;
+        }
+
         _clientSideRowModel.RefreshModel(parameters);
-        _eventService.DispatchEvent(GridEventTypes.ModelUpdated, new ModelUpdatedEventArgs(this, newData: parameters.NewData));
+        RaiseModelUpdated(parameters.NewData || parameters.RowDataUpdated);
     }
 
     /// <summary>
@@ -902,11 +1025,18 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     /// </summary>
     public RowTransaction<TData>? UpdateRowData(RowDataTransaction<TData> transaction)
     {
+        if (_rowModelType != RowModelType.ClientSide)
+        {
+            throw new InvalidOperationException("UpdateRowData is only supported when using the client-side row model.");
+        }
+
         var result = _clientSideRowModel.UpdateRowData(transaction);
         if (result != null)
         {
             _eventService.DispatchEvent(GridEventTypes.RowDataUpdated, new RowDataChangedEventArgs<TData>(this, _clientSideRowModel.GetTopLevelRows() ?? new List<Row<TData>>()));
+            RaiseModelUpdated(true);
         }
+
         return result;
     }
 
@@ -916,6 +1046,48 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public void DispatchEvent<T>(string eventType, T eventData) where T : class
     {
         _eventService.DispatchEvent(eventType, eventData);
+    }
+
+    internal RowModelType GetActiveRowModelType()
+    {
+        return _rowModelType;
+    }
+
+    internal int GetApproximateRowCount()
+    {
+        if (_rowModelType == RowModelType.ServerSide)
+        {
+            return _serverSideRowModel?.GetRowCount() ?? _serverSideBlockSize;
+        }
+
+        return _clientSideRowModel.GetRowCount();
+    }
+
+    internal Row<TData>? TryGetDisplayedRow(int index)
+    {
+        return _rowModelType == RowModelType.ServerSide
+            ? _serverSideRowModel?.GetRow(index)
+            : _clientSideRowModel.GetRow(index);
+    }
+
+    internal Task EnsureDataRangeAsync(int startRow, int endRow, CancellationToken cancellationToken = default)
+    {
+        if (_rowModelType == RowModelType.ServerSide && _serverSideRowModel != null)
+        {
+            return _serverSideRowModel.EnsureRangeAsync(startRow, endRow, cancellationToken);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    internal int GetPreferredFetchSize()
+    {
+        if (_rowModelType == RowModelType.ServerSide)
+        {
+            return _serverSideRowModel?.BlockSize ?? _serverSideBlockSize;
+        }
+
+        return Math.Max(State.Pagination?.PageSize ?? 64, 1);
     }
 
     // ================================
@@ -928,6 +1100,11 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public ColumnInteractiveService<TData> GetColumnInteractiveService()
     {
         return _columnInteractiveService;
+    }
+
+    private void OnServerRowsChanged(object? sender, EventArgs e)
+    {
+        RaiseModelUpdated(false);
     }
 
     /// <summary>
