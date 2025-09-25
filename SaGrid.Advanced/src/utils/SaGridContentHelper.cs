@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using SaGrid.Core;
 
 namespace SaGrid;
@@ -24,6 +26,16 @@ internal static class SaGridContentHelper<TData>
         }
 
         var cell = row.GetCell(column.Id);
-        return cell.Value?.ToString() ?? "";
+        if (cell.Value is IEnumerable<string> stringEnumerable)
+        {
+            return string.Join(", ", stringEnumerable);
+        }
+
+        if (cell.Value is IEnumerable<object?> enumerable && cell.Value is not string)
+        {
+            return string.Join(", ", enumerable.Select(v => v?.ToString() ?? string.Empty));
+        }
+
+        return cell.Value?.ToString() ?? string.Empty;
     }
 }

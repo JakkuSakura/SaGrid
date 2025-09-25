@@ -154,7 +154,7 @@ public sealed class AggregationService : IAggregationService
         return result;
     }
 
-    private static string CreateGroupRowId(Row<TData>? parent, string columnId, int index)
+    private static string CreateGroupRowId<TData>(Row<TData>? parent, string columnId, int index)
     {
         var prefix = parent?.Id ?? "root";
         return $"{prefix}|group|{columnId}|{index}";
@@ -235,7 +235,7 @@ public sealed class AggregationService : IAggregationService
 
     private bool TryResolveTypedAggregation<TData>(Column<TData> column, out Func<IEnumerable<object?>, object?> aggregator)
     {
-        aggregator = null;
+        aggregator = default!;
         var columnDef = column.ColumnDef;
         var type = columnDef.GetType();
         if (!type.IsGenericType || type.GetGenericTypeDefinition() != typeof(ColumnDef<,>))

@@ -146,6 +146,14 @@ public class Row<TData> : IRow<TData>
         return _aggregatedValues.TryGetValue(columnId, out value);
     }
 
+    public void UpdateCell(string columnId, object? value)
+    {
+        if (_cells.TryGetValue(columnId, out var cell))
+        {
+            cell.UpdateValue(value);
+        }
+    }
+
     public void ToggleSelected()
     {
         var currentSelection = _table.State.RowSelection ?? new RowSelectionState();

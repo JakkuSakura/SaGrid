@@ -65,6 +65,11 @@ internal sealed class FilterPanelView<TData> : UserControl
         };
         _columnList.SelectionChanged += OnColumnSelectionChanged;
 
+        _detailsHost = new ContentControl
+        {
+            Margin = new Thickness(12, 0, 0, 0)
+        };
+
         foreach (var column in _grid.AllLeafColumns)
         {
             var headerText = column.ColumnDef.Header?.ToString() ?? column.Id;
@@ -87,11 +92,6 @@ internal sealed class FilterPanelView<TData> : UserControl
                 FontStyle = FontStyle.Italic
             };
         }
-
-        _detailsHost = new ContentControl
-        {
-            Margin = new Thickness(12, 0, 0, 0)
-        };
 
         contentGrid.Children.Add(_columnList);
         Grid.SetColumn(_columnList, 0);

@@ -375,13 +375,22 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
             return true;
         }
 
-        return globalFilter switch
+        if (globalFilter is string text)
         {
-            string text => RowContainsText(row, text),
-            Func<Row<TData>, bool> rowPredicate => rowPredicate(row),
-            Func<object?, bool> valuePredicate => row.Cells.Values.Any(cell => valuePredicate(cell.Value)),
-            _ => true
-        };
+            return RowContainsText(row, text);
+        }
+
+        if (globalFilter is Func<Row<TData>, bool> rowPredicate)
+        {
+            return rowPredicate(row);
+        }
+
+        if (globalFilter is Func<object?, bool> valuePredicate)
+        {
+            return row.Cells.Values.Any(cell => valuePredicate(cell.Value));
+        }
+
+        return true;
     }
 
     private bool MatchesQuickFilter(Row<TData> row, string? quickFilter)

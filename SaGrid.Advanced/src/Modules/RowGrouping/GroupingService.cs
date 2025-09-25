@@ -20,7 +20,7 @@ public class GroupingService : IGroupingService
     private sealed class GroupingMetadata
     {
         public List<GroupingColumnState> Columns = new();
-        public bool PivotMode;
+        public bool PivotMode { get; set; }
     }
 
     private readonly IEventService _eventService;
@@ -34,7 +34,8 @@ public class GroupingService : IGroupingService
     public IReadOnlyList<string> GetGroupedColumnIds<TData>(SaGrid<TData> grid)
     {
         if (grid == null) throw new ArgumentNullException(nameof(grid));
-        return grid.State.Grouping?.Groups ?? Array.Empty<string>();
+        IReadOnlyList<string>? groups = grid.State.Grouping?.Groups;
+        return groups ?? Array.Empty<string>();
     }
 
     public void SetGrouping<TData>(SaGrid<TData> grid, IEnumerable<string> columnIds)

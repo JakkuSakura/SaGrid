@@ -118,6 +118,13 @@ public class Cell<TData> : ICell<TData>
         RenderValue = value;
         IsAggregated = true;
     }
+
+    public void UpdateValue(object? value)
+    {
+        Value = value;
+        RenderValue = value;
+        IsAggregated = false;
+    }
 }
 
 public class Cell<TData, TValue> : Cell<TData>, ICell<TData, TValue>
@@ -166,5 +173,12 @@ public class Cell<TData, TValue> : Cell<TData>, ICell<TData, TValue>
             Value = default!;
             RenderValue = default!;
         }
+    }
+
+    public void UpdateValue(TValue value)
+    {
+        base.UpdateValue(value);
+        Value = value;
+        RenderValue = value;
     }
 }

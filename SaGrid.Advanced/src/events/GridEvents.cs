@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using SaGrid.Advanced.Interfaces;
+using SaGrid.Advanced.Modules.Editing;
 using SaGrid.Core;
 
 namespace SaGrid.Advanced.Events;
@@ -185,6 +186,72 @@ public class AggregationChangedEventArgs : AgEventArgs
         : base(GridEventTypes.AggregationChanged, source)
     {
         Snapshot = snapshot;
+    }
+}
+
+/// <summary>
+/// Event arguments for cell edit start
+/// </summary>
+public sealed class CellEditStartedEventArgs<TData> : AgEventArgs
+{
+    public Row<TData> Row { get; }
+    public Column<TData> Column { get; }
+
+    public CellEditStartedEventArgs(object source, Row<TData> row, Column<TData> column)
+        : base(GridEventTypes.CellEditStarted, source)
+    {
+        Row = row;
+        Column = column;
+    }
+}
+
+/// <summary>
+/// Event arguments for cell edit commit
+/// </summary>
+public sealed class CellEditCommittedEventArgs<TData> : AgEventArgs
+{
+    public Row<TData> Row { get; }
+    public Column<TData> Column { get; }
+    public object? OldValue { get; }
+    public object? NewValue { get; }
+
+    public CellEditCommittedEventArgs(object source, Row<TData> row, Column<TData> column, object? oldValue, object? newValue)
+        : base(GridEventTypes.CellEditCommitted, source)
+    {
+        Row = row;
+        Column = column;
+        OldValue = oldValue;
+        NewValue = newValue;
+    }
+}
+
+/// <summary>
+/// Event arguments for cell edit cancellation
+/// </summary>
+public sealed class CellEditCancelledEventArgs<TData> : AgEventArgs
+{
+    public Row<TData> Row { get; }
+    public Column<TData> Column { get; }
+
+    public CellEditCancelledEventArgs(object source, Row<TData> row, Column<TData> column)
+        : base(GridEventTypes.CellEditCancelled, source)
+    {
+        Row = row;
+        Column = column;
+    }
+}
+
+/// <summary>
+/// Event arguments for batch edit operations
+/// </summary>
+public sealed class BatchEditEventArgs<TData> : AgEventArgs
+{
+    public IReadOnlyCollection<CellEditEntry<TData>> Edits { get; }
+
+    public BatchEditEventArgs(object source, string eventType, IReadOnlyCollection<CellEditEntry<TData>> edits)
+        : base(eventType, source)
+    {
+        Edits = edits;
     }
 }
 

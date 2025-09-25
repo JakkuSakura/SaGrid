@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using Avalonia.Threading;
 using SaGrid.Core;
@@ -14,6 +15,7 @@ using SaGrid.Advanced.Selection;
 using SaGrid.Advanced.Modules.Sorting;
 using SaGrid.Advanced.Interactive;
 using SaGrid.Advanced.Modules.Filters;
+using SaGrid.Advanced.Modules.Editing;
 
 namespace SaGrid;
 
@@ -28,6 +30,8 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     private readonly SortingEnhancementsService _sortingEnhancementsService;
     private readonly SideBarService _sideBarService;
     private readonly IFilterService _filterService;
+    private readonly ICellEditorService<TData> _cellEditorService;
+    private readonly BatchEditManager<TData> _batchEditManager;
     private readonly IAggregationService _aggregationService;
     private readonly IGroupingService _groupingService;
     private readonly StatusBarService _statusBarService;
@@ -48,6 +52,10 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _groupingService = context.Resolve<IGroupingService>();
         _statusBarService = context.Resolve<StatusBarService>();
         _eventService = context.TryResolve<IEventService>(out var eventService) ? eventService : new EventService();
+
+        var editorRegistry = context.Resolve<ICellEditorRegistry>();
+        _cellEditorService = editorRegistry.GetOrCreate<TData>();
+        _batchEditManager = _cellEditorService.GetBatchManager(this);
         _clientSideRowModel = new ClientSideRowModel<TData>(this);
         _columnInteractiveService = new ColumnInteractiveService<TData>(this, _eventService);
         
@@ -79,6 +87,10 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _groupingService = context.Resolve<IGroupingService>();
         _statusBarService = context.Resolve<StatusBarService>();
         _eventService = context.TryResolve<IEventService>(out var eventService) ? eventService : new EventService();
+
+        var editorRegistry = context.Resolve<ICellEditorRegistry>();
+        _cellEditorService = editorRegistry.GetOrCreate<TData>();
+        _batchEditManager = _cellEditorService.GetBatchManager(this);
         _clientSideRowModel = new ClientSideRowModel<TData>(this);
         _columnInteractiveService = new ColumnInteractiveService<TData>(this, _eventService);
         
@@ -138,6 +150,73 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public string ExportToJson()
     {
         return _exportService.ExportToJson(this);
+    }
+
+    public ICellEditorService<TData> GetEditingService()
+    {
+        return _cellEditorService;
+    }
+
+    public bool BeginCellEdit(Row<TData> row, Column<TData> column)
+    {
+        return _cellEditorService.BeginEdit(this, row, column);
+    }
+
+    public bool BeginCellEdit(string rowId, string columnId)
+    {
+        var row = GetRow(rowId);
+        var column = GetColumn(columnId);
+        if (row == null || column == null)
+        {
+            return false;
+        }
+
+        return BeginCellEdit(row, column);
+    }
+
+    public bool CommitActiveCellEdit()
+    {
+        return _cellEditorService.CommitEdit(this);
+    }
+
+    public void CancelActiveCellEdit()
+    {
+        _cellEditorService.CancelEdit(this);
+    }
+
+    public void BeginBatchEdit()
+    {
+        _cellEditorService.BeginBatch(this);
+    }
+
+    public void CommitBatchEdit()
+    {
+        _cellEditorService.CommitEdit(this);
+        _cellEditorService.CommitBatch(this);
+    }
+
+    public void CancelBatchEdit()
+    {
+        _cellEditorService.CancelEdit(this);
+        _cellEditorService.CancelBatch(this);
+    }
+
+    public void UndoLastEdit()
+    {
+        _cellEditorService.CancelEdit(this);
+        _cellEditorService.Undo(this);
+    }
+
+    public void RedoLastEdit()
+    {
+        _cellEditorService.CancelEdit(this);
+        _cellEditorService.Redo(this);
+    }
+
+    public IReadOnlyDictionary<CellCoordinate, CellEditEntry<TData>> GetPendingEdits()
+    {
+        return new ReadOnlyDictionary<CellCoordinate, CellEditEntry<TData>>(
+            new Dictionary<CellCoordinate, CellEditEntry<TData>>(_batchEditManager.PendingEdits));
     }
 
     // Advanced search and filtering
@@ -373,7 +452,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         ScheduleUIUpdate();
     }
 
-    public void SetSorting(string columnId, SortDirection direction)
+    public new void SetSorting(string columnId, SortDirection direction)
     {
         base.SetSorting(columnId, direction);
         ScheduleUIUpdate();
@@ -564,6 +643,12 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public void SetUIUpdateCallback(Action? callback)
     {
         _onUIUpdate = callback;
+    }
+
+    internal void UpdateCellValue(string rowId, string columnId, object? value)
+    {
+        var row = GetRow(rowId);
+        row?.UpdateCell(columnId, value);
     }
 
     public IFilterService GetFilterService()

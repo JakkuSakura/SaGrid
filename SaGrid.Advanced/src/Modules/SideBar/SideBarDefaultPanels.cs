@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using SaGrid;
@@ -67,8 +68,15 @@ public static class SideBarDefaultPanels
                     Margin = new Thickness(0, 0, 0, 4)
                 };
 
-                checkBox.Checked += (_, _) => _grid.SetColumnVisibility(column.Id, true);
-                checkBox.Unchecked += (_, _) => _grid.SetColumnVisibility(column.Id, false);
+                checkBox.PropertyChanged += (_, args) =>
+                {
+                    if (args.Property != ToggleButton.IsCheckedProperty)
+                    {
+                        return;
+                    }
+
+                    _grid.SetColumnVisibility(column.Id, checkBox.IsChecked == true);
+                };
 
                 _container.Children.Add(checkBox);
             }

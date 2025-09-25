@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using SaGrid.Advanced.Interfaces;
 using SaGrid.Advanced.Events;
+using SaGrid.Advanced.Interfaces;
 using SaGrid.Core;
 
 namespace SaGrid.Advanced.Modules.Filters;
@@ -23,6 +24,7 @@ internal sealed class SetFilterControl<TData> : UserControl
     private readonly ComboBox _operatorBox;
     private readonly TextBox _searchBox;
     private readonly List<CheckBox> _valueCheckBoxes = new();
+    private bool _suppressValueNotifications;
     private readonly Action<ModelUpdatedEventArgs> _modelUpdatedHandler;
     private readonly Action<FilterChangedEventArgs> _filterChangedHandler;
 
@@ -139,6 +141,7 @@ internal sealed class SetFilterControl<TData> : UserControl
 
     private void BuildValueList()
     {
+        _suppressValueNotifications = true;
         _valuesPanel.Children.Clear();
         _valueCheckBoxes.Clear();
 
@@ -159,13 +162,26 @@ internal sealed class SetFilterControl<TData> : UserControl
                             || (string.IsNullOrEmpty(value.Value) && setState.IncludeBlanks),
                 Margin = new Thickness(0, 0, 0, 4)
             };
-            check.Checked += (_, _) => OnValueChanged();
-            check.Unchecked += (_, _) => OnValueChanged();
+            check.PropertyChanged += (_, args) =>
+            {
+                if (args.Property != ToggleButton.IsCheckedProperty)
+                {
+                    return;
+                }
+
+                if (_suppressValueNotifications)
+                {
+                    return;
+                }
+
+                OnValueChanged();
+            };
             _valuesPanel.Children.Add(check);
             _valueCheckBoxes.Add(check);
         }
 
         UpdateSummary();
+        _suppressValueNotifications = false;
     }
 
     private void ApplySearch()

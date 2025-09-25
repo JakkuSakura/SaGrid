@@ -176,6 +176,16 @@ public static class GridEventTypes
     public const string FilterChanged = "filterChanged";
     public const string FilterModified = "filterModified";
 
+    // Editing events
+    public const string CellEditStarted = "cellEditStarted";
+    public const string CellEditCommitted = "cellEditCommitted";
+    public const string CellEditCancelled = "cellEditCancelled";
+    public const string BatchEditStarted = "batchEditStarted";
+    public const string BatchEditCommitted = "batchEditCommitted";
+    public const string BatchEditCancelled = "batchEditCancelled";
+    public const string BatchEditUndone = "batchEditUndone";
+    public const string BatchEditRedone = "batchEditRedone";
+
     // Sort events
     public const string SortChanged = "sortChanged";
 

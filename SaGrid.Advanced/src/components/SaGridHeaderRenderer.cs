@@ -167,7 +167,7 @@ internal class SaGridHeaderRenderer<TData>
 
     private Control CreateGroupingChip(SaGrid<TData> saGrid, Column<TData> column)
     {
-        var text = SaGridContentHelper<TData>.GetHeaderContent(column);
+        var text = column.ColumnDef.Header?.ToString() ?? column.Id;
 
         var label = new TextBlock
         {
@@ -185,9 +185,9 @@ internal class SaGridHeaderRenderer<TData>
             FontSize = 10,
             Background = Brushes.Transparent,
             BorderBrush = null,
-            Cursor = new Cursor(StandardCursorType.Hand),
-            ToolTip = $"Remove grouping by {text}"
+            Cursor = new Cursor(StandardCursorType.Hand)
         };
+        ToolTip.SetTip(closeButton, $"Remove grouping by {text}");
 
         closeButton.Click += (s, e) => saGrid.RemoveGroupingColumn(column.Id);
 
