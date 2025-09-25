@@ -1,6 +1,7 @@
 using SaGrid.Advanced.Context;
 using SaGrid.Advanced.Events;
 using SaGrid.Advanced.Modules.Aggregation;
+using SaGrid.Advanced.Modules.Filters;
 using SaGrid.Advanced.Modules.RowGrouping;
 using SaGrid.Advanced.Modules.SideBar;
 using SaGrid.Advanced.Modules.StatusBar;
@@ -35,6 +36,7 @@ internal static class SaGridModules
                 new RowGroupingModule(),
                 new AggregationModule(),
                 new SideBarModule(),
+                new FilterModule(),
                 new StatusBarModule(),
                 new SortingEnhancementsModule(),
                 new CellSelectionModule(),

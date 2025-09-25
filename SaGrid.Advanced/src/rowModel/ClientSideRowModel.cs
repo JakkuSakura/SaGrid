@@ -243,7 +243,16 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
 
     private void ExecuteFilterStage()
     {
-        _filteredRows = _table.PreFilteredRowModel.Rows.ToList();
+        var sourceRows = _table.PreFilteredRowModel.Rows;
+        var columnFilters = _table.State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
+        var globalFilter = _table.State.GlobalFilter?.Value;
+        var quickFilter = _grid.GetQuickFilter();
+
+        _filteredRows = sourceRows
+            .Where(row => MatchesColumnFilters(row, columnFilters)
+                          && MatchesGlobalFilter(row, globalFilter)
+                          && MatchesQuickFilter(row, quickFilter))
+            .ToList();
     }
 
     private void ExecuteSortStage()
@@ -291,5 +300,109 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
     {
         _rootRows = rows.ToList();
         RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Everything, NewData: true));
+    }
+
+    private bool MatchesColumnFilters(Row<TData> row, IReadOnlyList<ColumnFilter> filters)
+    {
+        if (filters.Count == 0)
+        {
+            return true;
+        }
+
+        foreach (var filter in filters)
+        {
+            if (!MatchesColumnFilter(row, filter))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool MatchesColumnFilter(Row<TData> row, ColumnFilter filter)
+    {
+        var cell = row.GetCell(filter.Id);
+        var cellValue = cell.Value;
+        var cellString = cellValue?.ToString() ?? string.Empty;
+
+        switch (filter.Value)
+        {
+            case null:
+                return true;
+            case SetFilterState setState:
+                return EvaluateSetFilter(cellString, setState);
+            case string text when !string.IsNullOrWhiteSpace(text):
+                return cellString.Contains(text, StringComparison.OrdinalIgnoreCase);
+            case Func<object?, bool> predicate:
+                return predicate(cellValue);
+            case Func<Row<TData>, bool> rowPredicate:
+                return rowPredicate(row);
+            default:
+                return Equals(cellValue, filter.Value);
+        }
+    }
+
+    private static bool EvaluateSetFilter(string cellString, SetFilterState state)
+    {
+        var isBlank = string.IsNullOrEmpty(cellString);
+        if (isBlank)
+        {
+            return state.IncludeBlanks;
+        }
+
+        var tokens = cellString
+            .Split(new[] { ',' }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        var selections = state.SelectedValues;
+        if (selections.Count == 0)
+        {
+            return true;
+        }
+
+        if (state.Operator == SetFilterOperator.All)
+        {
+            return selections.All(selection => tokens.Contains(selection, StringComparer.OrdinalIgnoreCase));
+        }
+
+        return tokens.Any(token => selections.Contains(token, StringComparer.OrdinalIgnoreCase));
+    }
+
+    private bool MatchesGlobalFilter(Row<TData> row, object? globalFilter)
+    {
+        if (globalFilter == null)
+        {
+            return true;
+        }
+
+        return globalFilter switch
+        {
+            string text => RowContainsText(row, text),
+            Func<Row<TData>, bool> rowPredicate => rowPredicate(row),
+            Func<object?, bool> valuePredicate => row.Cells.Values.Any(cell => valuePredicate(cell.Value)),
+            _ => true
+        };
+    }
+
+    private bool MatchesQuickFilter(Row<TData> row, string? quickFilter)
+    {
+        if (string.IsNullOrWhiteSpace(quickFilter))
+        {
+            return true;
+        }
+
+        return RowContainsText(row, quickFilter);
+    }
+
+    private static bool RowContainsText(Row<TData> row, string text)
+    {
+        var term = text.Trim();
+        if (term.Length == 0)
+        {
+            return true;
+        }
+
+        return row.Cells.Values.Any(cell =>
+            (cell.Value?.ToString() ?? string.Empty).Contains(term, StringComparison.OrdinalIgnoreCase));
     }
 }

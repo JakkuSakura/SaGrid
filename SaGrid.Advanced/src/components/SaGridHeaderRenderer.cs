@@ -552,10 +552,17 @@ internal class SaGridHeaderRenderer<TData>
             }
         };
 
-        var currentFilter = saGrid.State.ColumnFilters?.Filters.FirstOrDefault(f => f.Id == column.Id)?.Value?.ToString();
-        if (!string.IsNullOrEmpty(currentFilter) && textBox.Text != currentFilter)
+        var currentFilterValue = saGrid.State.ColumnFilters?.Filters.FirstOrDefault(f => f.Id == column.Id)?.Value;
+        if (currentFilterValue is string textValue)
         {
-            textBox.Text = currentFilter;
+            if (!string.Equals(textBox.Text, textValue, StringComparison.Ordinal))
+            {
+                textBox.Text = textValue;
+            }
+        }
+        else
+        {
+            textBox.Text = string.Empty;
         }
 
         return textBox;

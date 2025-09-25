@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia.Threading;
 using SaGrid.Core;
 using SaGrid.Advanced.Context;
@@ -12,6 +13,7 @@ using SaGrid.Advanced.RowModel;
 using SaGrid.Advanced.Selection;
 using SaGrid.Advanced.Modules.Sorting;
 using SaGrid.Advanced.Interactive;
+using SaGrid.Advanced.Modules.Filters;
 
 namespace SaGrid;
 
@@ -25,6 +27,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     private readonly CellSelectionService _cellSelectionService;
     private readonly SortingEnhancementsService _sortingEnhancementsService;
     private readonly SideBarService _sideBarService;
+    private readonly IFilterService _filterService;
     private readonly IAggregationService _aggregationService;
     private readonly IGroupingService _groupingService;
     private readonly StatusBarService _statusBarService;
@@ -40,6 +43,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _cellSelectionService = context.Resolve<CellSelectionService>();
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
         _sideBarService = context.Resolve<SideBarService>();
+        _filterService = context.Resolve<IFilterService>();
         _aggregationService = context.Resolve<IAggregationService>();
         _groupingService = context.Resolve<IGroupingService>();
         _statusBarService = context.Resolve<StatusBarService>();
@@ -48,6 +52,10 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _columnInteractiveService = new ColumnInteractiveService<TData>(this, _eventService);
         
         _sideBarService.EnsureDefaultPanels(this);
+        if (_filterService is FilterService filterServiceImpl)
+        {
+            filterServiceImpl.EnsureFilterPanel(this, _sideBarService);
+        }
         _statusBarService.EnsureDefaultWidgets(this);
         
         // Initialize the client-side row model
@@ -66,6 +74,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _cellSelectionService = context.Resolve<CellSelectionService>();
         _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
         _sideBarService = context.Resolve<SideBarService>();
+        _filterService = context.Resolve<IFilterService>();
         _aggregationService = context.Resolve<IAggregationService>();
         _groupingService = context.Resolve<IGroupingService>();
         _statusBarService = context.Resolve<StatusBarService>();
@@ -74,6 +83,10 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _columnInteractiveService = new ColumnInteractiveService<TData>(this, _eventService);
         
         _sideBarService.EnsureDefaultPanels(this);
+        if (_filterService is FilterService filterServiceImpl)
+        {
+            filterServiceImpl.EnsureFilterPanel(this, _sideBarService);
+        }
         _statusBarService.EnsureDefaultWidgets(this);
         
         // Initialize the client-side row model
@@ -442,12 +455,11 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     // Additional filtering methods needed by the example
     public void ClearColumnFilters()
     {
-        SetState(state => state with { ColumnFilters = null });
-        if (State.Pagination != null)
+        var currentFilters = State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
+        foreach (var filter in currentFilters.ToList())
         {
-            base.SetPageIndex(0);
+            ClearColumnFilter(filter.Id);
         }
-        ScheduleUIUpdate();
     }
 
     public void SetColumnFilter(string columnId, object? value)
@@ -457,10 +469,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         var currentValue = existing?.Value;
         var newFilters = currentFilters.Where(f => f.Id != columnId).ToList();
 
-        // Skip state update if value is effectively unchanged
-        var isEqual = (currentValue == null && value == null) ||
-                      (currentValue != null && value != null &&
-                       string.Equals(currentValue.ToString(), value.ToString(), StringComparison.Ordinal));
+        var isEqual = FiltersEqual(currentValue, value);
         if (isEqual)
         {
             return;
@@ -475,11 +484,79 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         { 
             ColumnFilters = newFilters.Count > 0 ? new ColumnFiltersState(newFilters) : null
         });
+
         if (State.Pagination != null)
         {
             base.SetPageIndex(0);
         }
+
+        if (value is not SetFilterState && _filterService is FilterService filterServiceImpl)
+        {
+            filterServiceImpl.NotifyManualFilterChange(this, columnId);
+        }
+
+        _eventService.DispatchEvent(GridEventTypes.FilterChanged, new FilterChangedEventArgs(this, columnId, value));
+        RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Filter));
         ScheduleUIUpdate();
+    }
+
+    public void ClearColumnFilter(string columnId)
+    {
+        var currentFilters = State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
+        if (!currentFilters.Any(f => f.Id == columnId))
+        {
+            return;
+        }
+
+        var newFilters = currentFilters.Where(f => f.Id != columnId).ToList();
+        SetState(state => state with
+        {
+            ColumnFilters = newFilters.Count > 0 ? new ColumnFiltersState(newFilters) : null
+        });
+
+        if (State.Pagination != null)
+        {
+            base.SetPageIndex(0);
+        }
+
+        if (_filterService is FilterService filterServiceImpl)
+        {
+            filterServiceImpl.NotifyManualFilterChange(this, columnId);
+        }
+
+        _eventService.DispatchEvent(GridEventTypes.FilterChanged, new FilterChangedEventArgs(this, columnId, null));
+        RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Filter));
+        ScheduleUIUpdate();
+    }
+
+    private static bool FiltersEqual(object? currentValue, object? newValue)
+    {
+        if (ReferenceEquals(currentValue, newValue))
+        {
+            return true;
+        }
+
+        if (currentValue == null || newValue == null)
+        {
+            return currentValue == null && newValue == null;
+        }
+
+        if (currentValue is SetFilterState currentSet && newValue is SetFilterState newSet)
+        {
+            if (currentSet.Operator != newSet.Operator || currentSet.IncludeBlanks != newSet.IncludeBlanks)
+            {
+                return false;
+            }
+
+            return currentSet.SelectedValues.SequenceEqual(newSet.SelectedValues, StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (currentValue is string currentString && newValue is string newString)
+        {
+            return string.Equals(currentString, newString, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return Equals(currentValue, newValue);
     }
 
     // Cell selection functionality
@@ -487,6 +564,11 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public void SetUIUpdateCallback(Action? callback)
     {
         _onUIUpdate = callback;
+    }
+
+    public IFilterService GetFilterService()
+    {
+        return _filterService;
     }
 
     // Pagination wrappers to ensure UI updates

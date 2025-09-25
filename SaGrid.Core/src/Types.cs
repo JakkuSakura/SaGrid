@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 
@@ -79,6 +80,14 @@ public record ColumnFiltersState(List<ColumnFilter> Filters = null!)
 public record ColumnFilter(string Id, object? Value);
 
 public record GlobalFilterState(object? Value);
+
+public enum SetFilterOperator
+{
+    Any,
+    All
+}
+
+public record SetFilterState(IReadOnlyList<string> SelectedValues, SetFilterOperator Operator = SetFilterOperator.Any, bool IncludeBlanks = false);
 
 public record GroupingState(List<string> Groups = null!)
 {
