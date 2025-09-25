@@ -1147,6 +1147,11 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         return _columnInteractiveService.SetColumnPinned(columnId, pinned);
     }
 
+    public bool SetColumnPinned(string columnId, string? pinnedArea)
+    {
+        return _columnInteractiveService.SetColumnPinned(columnId, pinnedArea);
+    }
+
 
 }
 

@@ -197,18 +197,66 @@ public class ColumnInteractiveService<TData>
     /// </summary>
     public bool SetColumnPinned(string columnId, bool pinned)
     {
-        try
-        {
-            // This would be implemented based on SaGrid's pinning capabilities
-            // For now, just fire the event
-            _eventService.DispatchEvent("columnPinned", new ColumnPinnedEventArgs<TData>(columnId, pinned));
-            
-            return true;
-        }
-        catch
+        var preferredArea = pinned ? ResolvePinnedPreference(columnId) : null;
+        return SetColumnPinned(columnId, preferredArea);
+    }
+
+    public bool SetColumnPinned(string columnId, string? pinnedArea)
+    {
+        var column = _table.GetColumn(columnId);
+        if (column == null)
         {
             return false;
         }
+
+        if (!CanMoveToPinnedArea(column, pinnedArea))
+        {
+            return false;
+        }
+
+        var displayOrder = GetVisibleLeafOrder().ToList();
+        if (!displayOrder.Contains(columnId))
+        {
+            return false;
+        }
+
+        var state = _table.State.ColumnPinning ?? new ColumnPinningState();
+        var left = state.Left?.ToList() ?? new List<string>();
+        var right = state.Right?.ToList() ?? new List<string>();
+
+        left.Remove(columnId);
+        right.Remove(columnId);
+
+        if (!string.IsNullOrEmpty(pinnedArea))
+        {
+            if (!_table.Options.EnableColumnPinning)
+            {
+                return false;
+            }
+
+            if (string.Equals(pinnedArea, "left", StringComparison.OrdinalIgnoreCase))
+            {
+                InsertIntoPinnedList(left, columnId, displayOrder);
+            }
+            else if (string.Equals(pinnedArea, "right", StringComparison.OrdinalIgnoreCase))
+            {
+                InsertIntoPinnedList(right, columnId, displayOrder);
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        var newState = new ColumnPinningState
+        {
+            Left = left.Count > 0 ? left : null,
+            Right = right.Count > 0 ? right : null
+        };
+
+        _table.SetState(state => state with { ColumnPinning = newState });
+        _eventService.DispatchEvent("columnPinned", new ColumnPinnedEventArgs<TData>(columnId, pinnedArea != null, pinnedArea));
+        return true;
     }
 
     internal IReadOnlyList<string> GetVisibleLeafOrder()
@@ -435,7 +483,22 @@ public class ColumnInteractiveService<TData>
 
         return null;
     }
+
+    private string? ResolvePinnedPreference(string columnId)
+    {
+        var column = _table.GetColumn(columnId);
+        if (column?.ColumnDef.Meta != null &&
+            column.ColumnDef.Meta.TryGetValue(ColumnMetaKeys.Pinned, out var value))
+        {
+            if (value is string text && !string.IsNullOrWhiteSpace(text))
+            {
+                return text;
+            }
+        }
+
+        return "left";
     }
+}
 
 /// <summary>
 /// Event arguments for column operations
@@ -482,10 +545,12 @@ public class ColumnPinnedEventArgs<TData> : AgEventArgs
 {
     public string ColumnId { get; }
     public bool IsPinned { get; }
+    public string? PinnedArea { get; }
 
-    public ColumnPinnedEventArgs(string columnId, bool isPinned) : base("columnPinned", columnId)
+    public ColumnPinnedEventArgs(string columnId, bool isPinned, string? pinnedArea) : base("columnPinned", columnId)
     {
         ColumnId = columnId;
         IsPinned = isPinned;
+        PinnedArea = pinnedArea;
     }
 }
