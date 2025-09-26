@@ -48,7 +48,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     private readonly RowModelType _rowModelType;
     private readonly int _serverSideBlockSize;
 
-    internal event EventHandler? RowDataChanged;
+    public event EventHandler? RowDataChanged;
 
     public SaGrid(TableOptions<TData> options) : base(options)
     {
@@ -210,6 +210,16 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public string BuildClipboardData(ClipboardExportFormat format = ClipboardExportFormat.TabDelimited, bool includeHeaders = true)
     {
         return _exportService.BuildClipboardData(this, format, includeHeaders);
+    }
+
+    public int GetApproximateRowCount()
+    {
+        if (_rowModelType == RowModelType.ServerSide && _serverSideRowModel != null)
+        {
+            return _serverSideRowModel.GetRowCount();
+        }
+
+        return RowModel.FlatRows.Count;
     }
 
     public ChartRequest BuildDefaultChartRequest()
@@ -1089,16 +1099,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     {
         return _rowModelType;
     }
-
-    internal int GetApproximateRowCount()
-    {
-        if (_rowModelType == RowModelType.ServerSide)
-        {
-            return _serverSideRowModel?.GetRowCount() ?? _serverSideBlockSize;
-        }
-
-        return _clientSideRowModel.GetRowCount();
-    }
+    
 
     internal Row<TData>? TryGetDisplayedRow(int index)
     {

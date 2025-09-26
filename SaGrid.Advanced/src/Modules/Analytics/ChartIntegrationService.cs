@@ -4,8 +4,9 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using Avalonia;
-using Avalonia.ApplicationLifetimes;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -141,11 +142,9 @@ internal sealed class ChartIntegrationService : IChartIntegrationService
             return;
         }
 
-        existing.Add(new ContextMenuItem
+        existing.Add(new ContextMenuItem(DefaultContextMenuId, "Create Quick Chart")
         {
-            Id = DefaultContextMenuId,
-            Label = "Create Quick Chart",
-            Action = _ => TryShowDefaultChart(grid)
+            Action = _ => _ = TryShowDefaultChart(grid)
         });
 
         grid.SetContextMenuItems(existing);
@@ -160,10 +159,10 @@ internal sealed class ChartIntegrationService : IChartIntegrationService
         };
 
         var lifetime = Application.Current?.ApplicationLifetime;
-        if (lifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        if (lifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } owner })
         {
-            window.Icon = desktop.MainWindow?.Icon;
-            window.Show(desktop.MainWindow);
+            window.Icon = owner.Icon;
+            window.Show(owner);
         }
         else
         {
@@ -421,7 +420,7 @@ internal sealed class ChartHostWindow : Window
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = 4,
-                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center
             };
 
             itemPanel.Children.Add(new Border

@@ -4,8 +4,8 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Avalonia;
-using Avalonia.ApplicationLifetimes;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using SaGrid;
 using SaGrid.Advanced.Events;
@@ -66,7 +66,7 @@ internal sealed class ExportCoordinator : IExportCoordinator
         }
         else
         {
-            var operation = await Dispatcher.UIThread.InvokeAsync(() => ShowDialogInternalAsync(descriptors, owner));
+            var operation = Dispatcher.UIThread.InvokeAsync(() => ShowDialogInternalAsync(descriptors, owner));
             request = await operation;
         }
 
@@ -79,7 +79,7 @@ internal sealed class ExportCoordinator : IExportCoordinator
 
         if (RequiresClipboardCopy(request) && result.HasText)
         {
-            await CopyToClipboardAsync(result.TextPayload!);
+            await CopyToClipboardAsync(owner, result.TextPayload!);
         }
 
         return result;
@@ -91,7 +91,8 @@ internal sealed class ExportCoordinator : IExportCoordinator
         if (request == null) throw new ArgumentNullException(nameof(request));
 
         var result = _exportService.Export(grid, request);
-        _eventService.DispatchEvent(GridEventTypes.ExportPerformed, new ExportPerformedEventArgs(grid, request, result));
+        _eventService.DispatchEvent(GridEventTypes.ExportPerformed,
+            new ExportPerformedEventArgs(grid, request, result));
         return result;
     }
 
@@ -104,10 +105,8 @@ internal sealed class ExportCoordinator : IExportCoordinator
             return;
         }
 
-        existing.Add(new ContextMenuItem
+        existing.Add(new ContextMenuItem(ContextMenuId, "Export...")
         {
-            Id = ContextMenuId,
-            Label = "Export...",
             Action = _ => _ = ShowExportDialogAsync(grid)
         });
 
@@ -132,20 +131,20 @@ internal sealed class ExportCoordinator : IExportCoordinator
         return request.Format is ExportFormat.ClipboardPlain or ExportFormat.ClipboardTab;
     }
 
-    private static async Task CopyToClipboardAsync(string text)
+    private static async Task CopyToClipboardAsync(Window owner, string text)
     {
-        if (Application.Current?.Clipboard == null)
+        if (owner?.Clipboard is not { } provider)
         {
-            return;
+            throw new InvalidOperationException("Clipboard is not available on the current window.");
         }
 
         if (Dispatcher.UIThread.CheckAccess())
         {
-            await Application.Current.Clipboard.SetTextAsync(text);
+            await provider.SetTextAsync(text);
         }
         else
         {
-            await Dispatcher.UIThread.InvokeAsync(() => Application.Current!.Clipboard!.SetTextAsync(text));
+            await Dispatcher.UIThread.InvokeAsync(() => provider.SetTextAsync(text));
         }
     }
 

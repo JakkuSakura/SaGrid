@@ -5,6 +5,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Data;
 using Avalonia.Media;
+using Path = Avalonia.Controls.Shapes.Path;
 
 namespace SaGrid.Advanced.Modules.SideBar;
 

@@ -1,41 +1,62 @@
-using System.Collections.Concurrent;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
 namespace SaGrid.Advanced.Context;
 
 /// <summary>
-/// Simple service registry passed to advanced modules during initialization.
-/// Mirrors the role of AG Grid's bean collection but simplified for SaGrid.
+/// Service registry handed to advanced modules. Provides a small dependency injection
+/// container inspired by AG Grid's BeanCollection so modules can register and resolve
+/// shared services with singleton or transient lifetimes.
 /// </summary>
-public sealed class AdvancedModuleContext
+public sealed class AdvancedModuleContext : IBeanContext
 {
-    private readonly ConcurrentDictionary<Type, object> _services = new();
+    private readonly BeanCollection _beans = new();
 
     public void RegisterService<TService>(TService instance) where TService : class
     {
         if (instance == null) throw new ArgumentNullException(nameof(instance));
-        _services[typeof(TService)] = instance;
+        _beans.RegisterInstance(typeof(TService), instance, replaceExisting: true);
+    }
+
+    public void RegisterSingleton<TService>(Func<IBeanContext, TService> factory, bool replaceExisting = false)
+        where TService : class
+    {
+        if (factory == null) throw new ArgumentNullException(nameof(factory));
+        _beans.RegisterSingleton(typeof(TService), ctx => factory(ctx), replaceExisting);
+    }
+
+    public void RegisterSingleton<TService>(Func<TService> factory, bool replaceExisting = false)
+        where TService : class
+    {
+        if (factory == null) throw new ArgumentNullException(nameof(factory));
+        _beans.RegisterSingleton(typeof(TService), _ => factory(), replaceExisting);
+    }
+
+    public void RegisterTransient<TService>(Func<IBeanContext, TService> factory) where TService : class
+    {
+        if (factory == null) throw new ArgumentNullException(nameof(factory));
+        _beans.RegisterTransient(typeof(TService), ctx => factory(ctx));
+    }
+
+    public void RegisterTransient<TService>(Func<TService> factory) where TService : class
+    {
+        if (factory == null) throw new ArgumentNullException(nameof(factory));
+        _beans.RegisterTransient(typeof(TService), _ => factory());
     }
 
     public bool TryResolve<TService>([NotNullWhen(true)] out TService? service) where TService : class
     {
-        if (_services.TryGetValue(typeof(TService), out var value) && value is TService typed)
-        {
-            service = typed;
-            return true;
-        }
-
-        service = null;
-        return false;
+        return _beans.TryResolve(this, out service);
     }
 
     public TService Resolve<TService>() where TService : class
     {
-        if (TryResolve<TService>(out var service))
-        {
-            return service;
-        }
+        return _beans.Resolve<TService>(this);
+    }
 
-        throw new InvalidOperationException($"Service '{typeof(TService).Name}' is not registered.");
+    public IReadOnlyList<TService> ResolveAll<TService>() where TService : class
+    {
+        return _beans.ResolveAll<TService>(this);
     }
 }

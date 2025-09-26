@@ -10,7 +10,6 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Avalonia.VisualTree;
 using SaGrid;
 
 namespace SaGrid.Advanced.Modules.SideBar;
@@ -156,9 +155,10 @@ public class SideBarHost : UserControl
             IsChecked = isActive,
             Focusable = true,
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            ToolTip = panel.Title,
             Content = CreateButtonContent(panel)
         };
+
+        ToolTip.SetTip(button, panel.Title);
 
         AutomationProperties.SetName(button, panel.Title);
 
@@ -328,7 +328,15 @@ public class SideBarHost : UserControl
             return;
         }
 
-        buttons[index].Focus();
+        var target = buttons[index];
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => target.Focus());
+        }
+        else
+        {
+            target.Focus();
+        }
     }
 
     private List<ToggleButton> GetButtonList()
@@ -350,13 +358,9 @@ public class SideBarHost : UserControl
             return;
         }
 
-        if (!force)
+        if (!force && buttons.Any(b => b.IsFocused))
         {
-            var current = FocusManager.Instance?.Current as IVisual;
-            if (current != null && _buttonPanel.IsVisualAncestorOf(current))
-            {
-                return;
-            }
+            return;
         }
 
         ToggleButton? target = null;
@@ -370,7 +374,14 @@ public class SideBarHost : UserControl
         target ??= buttons[0];
 
         var buttonToFocus = target;
-        Dispatcher.UIThread.Post(() => buttonToFocus.Focus());
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => buttonToFocus.Focus());
+        }
+        else
+        {
+            buttonToFocus.Focus();
+        }
     }
 
     private void UpdateLayoutForPosition(SideBarPosition position)
