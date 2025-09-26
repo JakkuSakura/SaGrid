@@ -274,7 +274,7 @@ internal class SaGridHeaderRenderer<TData>
             _dragDropManager.RegisterDragSource(dragSource);
             _activeDragSources.Add(dragSource);
 
-            var resizeHandle = CreateResizeHandle(column, header);
+            var resizeHandle = CreateResizeHandle(saGrid, column, header);
             Grid.SetColumn(resizeHandle, 1);
             headerGrid.Children.Add(resizeHandle);
         }
@@ -305,7 +305,7 @@ internal class SaGridHeaderRenderer<TData>
         return button;
     }
 
-    private Control CreateResizeHandle(Column<TData> column, IHeader<TData> header)
+    private Control CreateResizeHandle(SaGrid<TData> saGrid, Column<TData> column, IHeader<TData> header)
     {
         var resizeHandle = new Border()
             .Width(4)
@@ -316,6 +316,7 @@ internal class SaGridHeaderRenderer<TData>
         double? dragStartX = null;
         double startWidth = 0;
         var isResizing = false;
+        Column<TData>? neighbourColumn = null;
 
         resizeHandle.PointerEntered += (s, e) =>
         {
@@ -341,6 +342,11 @@ internal class SaGridHeaderRenderer<TData>
                 dragStartX = point.Position.X;
                 startWidth = header.Size;
                 isResizing = true;
+                neighbourColumn = saGrid.VisibleLeafColumns
+                    .SkipWhile(c => c.Id != column.Id)
+                    .Skip(1)
+                    .Cast<Column<TData>?>()
+                    .FirstOrDefault();
                 e.Pointer.Capture(resizeHandle);
                 e.Handled = true;
             }
@@ -352,8 +358,15 @@ internal class SaGridHeaderRenderer<TData>
             {
                 var current = e.GetCurrentPoint(resizeHandle).Position.X;
                 var delta = current - dragStartX.Value;
-                var newWidth = Math.Max(30, startWidth + delta);
-                _columnService?.SetColumnWidth(column.Id, newWidth);
+                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && neighbourColumn != null)
+                {
+                    _columnService?.ResizeColumnPair(column.Id, neighbourColumn.Id, delta);
+                }
+                else
+                {
+                    var newWidth = startWidth + delta;
+                    _columnService?.SetColumnWidth(column.Id, newWidth);
+                }
                 e.Handled = true;
             }
         };

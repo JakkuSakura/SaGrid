@@ -94,38 +94,26 @@ public class ColumnInteractiveService<TData>
     /// </summary>
     public bool SetColumnWidth(string columnId, double width)
     {
-        try
-        {
-            const double minWidth = 20;
-            const double maxWidth = 2000;
-
-            // Basic validation
-            if (width < minWidth || width > maxWidth)
-            {
-                return false;
-            }
-
-            var column = _table.GetColumn(columnId);
-            if (column == null)
-            {
-                return false;
-            }
-
-            // Update column sizing
-            var columnSizing = _table.State.ColumnSizing ?? new ColumnSizingState();
-            var newSizing = columnSizing.With(columnId, width);
-            
-            _table.SetState(state => state with { ColumnSizing = newSizing });
-
-            // Fire event
-            _eventService.DispatchEvent("columnResized", new ColumnResizedEventArgs<TData>(columnId, width));
-            
-            return true;
-        }
-        catch
+        var column = _table.GetColumn(columnId);
+        if (column == null || !column.CanResize)
         {
             return false;
         }
+
+        var (minWidth, maxWidth) = GetColumnMinMax(column);
+        var clamped = Math.Clamp(width, minWidth, maxWidth);
+
+        var columnSizing = _table.State.ColumnSizing ?? new ColumnSizingState();
+        var currentWidth = columnSizing.GetValueOrDefault(columnId, column.ColumnDef.Size ?? minWidth);
+        if (Math.Abs(currentWidth - clamped) < 0.5)
+        {
+            return false;
+        }
+
+        var newSizing = columnSizing.With(columnId, clamped);
+        _table.SetState(state => state with { ColumnSizing = newSizing });
+        _eventService.DispatchEvent("columnResized", new ColumnResizedEventArgs<TData>(columnId, clamped));
+        return true;
     }
 
     /// <summary>
@@ -482,6 +470,76 @@ public class ColumnInteractiveService<TData>
         }
 
         return null;
+    }
+
+    public bool ResizeColumnPair(string primaryColumnId, string? secondaryColumnId, double delta)
+    {
+        var primary = _table.GetColumn(primaryColumnId);
+        if (primary == null || !primary.CanResize)
+        {
+            return false;
+        }
+
+        var (primaryMin, primaryMax) = GetColumnMinMax(primary);
+        var sizing = _table.State.ColumnSizing ?? new ColumnSizingState();
+        var primaryWidth = sizing.GetValueOrDefault(primaryColumnId, primary.ColumnDef.Size ?? primaryMin);
+
+        var desiredPrimary = Math.Clamp(primaryWidth + delta, primaryMin, primaryMax);
+        var appliedDelta = desiredPrimary - primaryWidth;
+
+        ColumnSizingState newSizing;
+
+        if (!string.IsNullOrEmpty(secondaryColumnId))
+        {
+            var secondary = _table.GetColumn(secondaryColumnId);
+            if (secondary == null || !secondary.CanResize)
+            {
+                return false;
+            }
+
+            var (secondaryMin, secondaryMax) = GetColumnMinMax(secondary);
+            var secondaryWidth = sizing.GetValueOrDefault(secondaryColumnId!, secondary.ColumnDef.Size ?? secondaryMin);
+            var desiredSecondary = Math.Clamp(secondaryWidth - appliedDelta, secondaryMin, secondaryMax);
+
+            // adjust delta if neighbour cannot shrink fully
+            var neighbourDelta = secondaryWidth - desiredSecondary;
+            if (Math.Abs(neighbourDelta - appliedDelta) > 0.5)
+            {
+                appliedDelta = neighbourDelta;
+                desiredPrimary = Math.Clamp(primaryWidth + appliedDelta, primaryMin, primaryMax);
+            }
+
+            newSizing = sizing
+                .With(primaryColumnId, desiredPrimary)
+                .With(secondaryColumnId!, desiredSecondary);
+
+            _eventService.DispatchEvent("columnResized", new ColumnResizedEventArgs<TData>(secondaryColumnId!, desiredSecondary));
+        }
+        else
+        {
+            newSizing = sizing.With(primaryColumnId, desiredPrimary);
+        }
+
+        if (Math.Abs(appliedDelta) < 0.25)
+        {
+            return false;
+        }
+
+        _table.SetState(state => state with { ColumnSizing = newSizing });
+        _eventService.DispatchEvent("columnResized", new ColumnResizedEventArgs<TData>(primaryColumnId, desiredPrimary));
+        return true;
+    }
+
+    private (double Min, double Max) GetColumnMinMax(Column<TData> column)
+    {
+        var min = column.ColumnDef.MinSize ?? 40;
+        var max = column.ColumnDef.MaxSize ?? Math.Max(min, 1000);
+        if (max < min)
+        {
+            max = min;
+        }
+
+        return (min, max);
     }
 
     private string? ResolvePinnedPreference(string columnId)
