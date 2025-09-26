@@ -4,11 +4,13 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Controls;
 using Avalonia.Threading;
 using SaGrid.Core;
 using SaGrid.Advanced.Context;
 using SaGrid.Advanced.Events;
 using SaGrid.Advanced.Interfaces;
+using SaGrid.Advanced.Modules.Analytics;
 using SaGrid.Advanced.Modules.SideBar;
 using SaGrid.Advanced.Modules.StatusBar;
 using SaGrid.Advanced.Modules.Export;
@@ -38,6 +40,8 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     private readonly IGroupingService _groupingService;
     private readonly StatusBarService _statusBarService;
     private readonly IEventService _eventService;
+    private readonly IChartIntegrationService _chartIntegrationService;
+    private readonly IExportCoordinator _exportCoordinator;
     private readonly IClientSideRowModel<TData> _clientSideRowModel;
     private readonly ColumnInteractiveService<TData> _columnInteractiveService;
     private readonly IServerSideRowModel<TData>? _serverSideRowModel;
@@ -61,6 +65,8 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _groupingService = context.Resolve<IGroupingService>();
         _statusBarService = context.Resolve<StatusBarService>();
         _eventService = context.TryResolve<IEventService>(out var eventService) ? eventService : new EventService();
+        _chartIntegrationService = context.Resolve<IChartIntegrationService>();
+        _exportCoordinator = context.Resolve<IExportCoordinator>();
 
         var editorRegistry = context.Resolve<ICellEditorRegistry>();
         _cellEditorService = editorRegistry.GetOrCreate<TData>();
@@ -83,6 +89,8 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
             filterServiceImpl.EnsureFilterPanel(this, _sideBarService);
         }
         _statusBarService.EnsureDefaultWidgets(this);
+        _chartIntegrationService.AttachToGrid(this);
+        _exportCoordinator.AttachToGrid(this);
         
         if (_rowModelType == RowModelType.ClientSide)
         {
@@ -109,6 +117,8 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _groupingService = context.Resolve<IGroupingService>();
         _statusBarService = context.Resolve<StatusBarService>();
         _eventService = context.TryResolve<IEventService>(out var eventService) ? eventService : new EventService();
+        _chartIntegrationService = context.Resolve<IChartIntegrationService>();
+        _exportCoordinator = context.Resolve<IExportCoordinator>();
 
         var editorRegistry = context.Resolve<ICellEditorRegistry>();
         _cellEditorService = editorRegistry.GetOrCreate<TData>();
@@ -131,6 +141,8 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
             filterServiceImpl.EnsureFilterPanel(this, _sideBarService);
         }
         _statusBarService.EnsureDefaultWidgets(this);
+        _chartIntegrationService.AttachToGrid(this);
+        _exportCoordinator.AttachToGrid(this);
         
         if (_rowModelType == RowModelType.ClientSide)
         {
@@ -198,6 +210,31 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public string BuildClipboardData(ClipboardExportFormat format = ClipboardExportFormat.TabDelimited, bool includeHeaders = true)
     {
         return _exportService.BuildClipboardData(this, format, includeHeaders);
+    }
+
+    public ChartRequest BuildDefaultChartRequest()
+    {
+        return _chartIntegrationService.BuildDefaultRequest(this);
+    }
+
+    public bool ShowChart(ChartRequest request)
+    {
+        return _chartIntegrationService.ShowChart(this, request);
+    }
+
+    public bool ShowQuickChart()
+    {
+        return _chartIntegrationService.TryShowDefaultChart(this);
+    }
+
+    public Task<ExportResult?> ShowExportOptionsAsync(Window? owner = null)
+    {
+        return _exportCoordinator.ShowExportDialogAsync(this, owner);
+    }
+
+    public ExportResult ExportWithOptions(ExportRequest request)
+    {
+        return _exportCoordinator.ExecuteExport(this, request);
     }
 
     public ICellEditorService<TData> GetEditingService()

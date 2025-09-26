@@ -198,4 +198,8 @@ public static class GridEventTypes
     // Grouping and aggregation events
     public const string GroupingChanged = "groupingChanged";
     public const string AggregationChanged = "aggregationChanged";
+
+    // Analytics / export events
+    public const string ChartCreated = "chartCreated";
+    public const string ExportPerformed = "exportPerformed";
 }

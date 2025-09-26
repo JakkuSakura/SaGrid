@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using SaGrid.Advanced.Interfaces;
+using SaGrid.Advanced.Modules.Analytics;
 using SaGrid.Advanced.Modules.Editing;
+using SaGrid.Advanced.Modules.Export;
 using SaGrid.Core;
 
 namespace SaGrid.Advanced.Events;
@@ -186,6 +188,32 @@ public class AggregationChangedEventArgs : AgEventArgs
         : base(GridEventTypes.AggregationChanged, source)
     {
         Snapshot = snapshot;
+    }
+}
+
+public class ChartCreatedEventArgs : AgEventArgs
+{
+    public ChartData ChartData { get; }
+    public ChartRequest Request { get; }
+
+    public ChartCreatedEventArgs(object source, ChartData chartData, ChartRequest request)
+        : base(GridEventTypes.ChartCreated, source)
+    {
+        ChartData = chartData;
+        Request = request;
+    }
+}
+
+public class ExportPerformedEventArgs : AgEventArgs
+{
+    public ExportRequest Request { get; }
+    public ExportResult Result { get; }
+
+    public ExportPerformedEventArgs(object source, ExportRequest request, ExportResult result)
+        : base(GridEventTypes.ExportPerformed, source)
+    {
+        Request = request;
+        Result = result;
     }
 }
 

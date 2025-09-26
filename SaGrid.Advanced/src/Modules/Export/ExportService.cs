@@ -1,9 +1,12 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
+using SaGrid;
 using SaGrid.Core;
 
 namespace SaGrid.Advanced.Modules.Export;
@@ -16,88 +19,188 @@ public enum ClipboardExportFormat
 
 /// <summary>
 /// Handles export operations for SaGrid, mirroring AG Grid's export services.
+/// Provides additional option-based exports for advanced scenarios.
 /// </summary>
 public class ExportService
 {
     public async Task<string> ExportToCsvAsync<TData>(SaGrid<TData> grid)
     {
-        return await Task.Run(() => BuildCsv(grid));
+        var request = new ExportRequest(ExportFormat.Csv);
+        var result = await Task.Run(() => Export(grid, request));
+        return result.TextPayload ?? string.Empty;
     }
 
     public string ExportToCsv<TData>(SaGrid<TData> grid)
     {
-        return BuildCsv(grid);
+        return Export(grid, new ExportRequest(ExportFormat.Csv)).TextPayload ?? string.Empty;
     }
 
     public async Task<string> ExportToJsonAsync<TData>(SaGrid<TData> grid)
     {
-        return await Task.Run(() => BuildJson(grid));
+        var request = new ExportRequest(ExportFormat.Json);
+        var result = await Task.Run(() => Export(grid, request));
+        return result.TextPayload ?? string.Empty;
     }
 
     public string ExportToJson<TData>(SaGrid<TData> grid)
     {
-        return BuildJson(grid);
+        return Export(grid, new ExportRequest(ExportFormat.Json)).TextPayload ?? string.Empty;
     }
 
     public async Task<byte[]> ExportToExcelAsync<TData>(SaGrid<TData> grid)
     {
-        return await Task.Run(() => BuildExcel(grid));
+        var request = new ExportRequest(ExportFormat.Excel);
+        var result = await Task.Run(() => Export(grid, request));
+        return result.BinaryPayload ?? Array.Empty<byte>();
     }
 
     public byte[] ExportToExcel<TData>(SaGrid<TData> grid)
     {
-        return BuildExcel(grid);
+        return Export(grid, new ExportRequest(ExportFormat.Excel)).BinaryPayload ?? Array.Empty<byte>();
     }
 
     public string BuildClipboardData<TData>(SaGrid<TData> grid, ClipboardExportFormat format = ClipboardExportFormat.TabDelimited, bool includeHeaders = true)
     {
-        return BuildClipboardText(grid, format, includeHeaders);
+        var request = format == ClipboardExportFormat.TabDelimited
+            ? new ExportRequest(ExportFormat.ClipboardTab, IncludeHeaders: includeHeaders)
+            : new ExportRequest(ExportFormat.ClipboardPlain, IncludeHeaders: includeHeaders);
+
+        return Export(grid, request).TextPayload ?? string.Empty;
     }
 
-    private static string BuildCsv<TData>(SaGrid<TData> grid)
+    public ExportResult Export<TData>(SaGrid<TData> grid, ExportRequest request)
     {
-        var csv = new StringBuilder();
+        if (grid == null) throw new ArgumentNullException(nameof(grid));
+        if (request == null) throw new ArgumentNullException(nameof(request));
 
-        var headers = grid.VisibleLeafColumns
-            .Select(c => EscapeCsvValue(c.ColumnDef.Header?.ToString() ?? c.Id))
-            .ToList();
-        csv.AppendLine(string.Join(",", headers));
+        var context = BuildContext(grid, request);
 
-        foreach (var row in grid.RowModel.FlatRows)
+        return request.Format switch
         {
-            var values = grid.VisibleLeafColumns.Select(column =>
-            {
-                var cell = row.GetCell(column.Id);
-                var value = cell.Value?.ToString() ?? string.Empty;
-                return EscapeCsvValue(value);
-            });
+            ExportFormat.Csv => new ExportResult(ExportFormat.Csv, BuildCsvText(context, request.IncludeHeaders, request.CsvDelimiter), null),
+            ExportFormat.Json => new ExportResult(ExportFormat.Json, BuildJson(context), null),
+            ExportFormat.Excel => new ExportResult(ExportFormat.Excel, null, BuildExcel(context)),
+            ExportFormat.ClipboardTab => new ExportResult(ExportFormat.ClipboardTab, BuildPlainDelimited(context, request.IncludeHeaders, '\t'), null),
+            ExportFormat.ClipboardPlain => new ExportResult(ExportFormat.ClipboardPlain, BuildPlainDelimited(context, request.IncludeHeaders, ' '), null),
+            _ => throw new NotSupportedException($"Export format '{request.Format}' is not supported.")
+        };
+    }
 
-            csv.AppendLine(string.Join(",", values));
+    private static ExportContext<TData> BuildContext<TData>(SaGrid<TData> grid, ExportRequest request)
+    {
+        var columns = ResolveColumns(grid, request);
+        var rows = ResolveRows(grid, request);
+        return new ExportContext<TData>(columns, rows);
+    }
+
+    private static IReadOnlyList<Column<TData>> ResolveColumns<TData>(SaGrid<TData> grid, ExportRequest request)
+    {
+        var allColumns = grid.AllLeafColumns.ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
+        var result = new List<Column<TData>>();
+
+        if (request.ColumnIds is { Count: > 0 })
+        {
+            foreach (var id in request.ColumnIds)
+            {
+                if (allColumns.TryGetValue(id, out var column))
+                {
+                    if (request.IncludeHiddenColumns || grid.VisibleLeafColumns.Contains(column))
+                    {
+                        result.Add(column);
+                    }
+                }
+            }
+
+            if (result.Count > 0)
+            {
+                return result;
+            }
         }
 
-        return csv.ToString();
+        var source = request.IncludeHiddenColumns ? grid.AllLeafColumns : grid.VisibleLeafColumns;
+        return source.ToList();
     }
 
-    private static string BuildJson<TData>(SaGrid<TData> grid)
+    private static IReadOnlyList<Row<TData>> ResolveRows<TData>(SaGrid<TData> grid, ExportRequest request)
     {
-        var data = grid.RowModel.FlatRows.Select(row =>
+        var rows = grid.RowModel.FlatRows.OfType<Row<TData>>();
+        if (!request.IncludeGroupRows)
+        {
+            rows = rows.Where(row => !row.IsGroupRow);
+        }
+
+        return rows.ToList();
+    }
+
+    private static string BuildCsvText<TData>(ExportContext<TData> context, bool includeHeaders, char delimiter)
+    {
+        var builder = new StringBuilder();
+
+        if (includeHeaders)
+        {
+            var headers = context.Columns.Select(c => EscapeCsvValue(c.ColumnDef.Header?.ToString() ?? c.Id, delimiter));
+            builder.AppendLine(string.Join(delimiter, headers));
+        }
+
+        foreach (var row in context.Rows)
+        {
+            var values = context.Columns.Select(column =>
+            {
+                var value = ExtractCellValue(row, column.Id);
+                return EscapeCsvValue(value?.ToString() ?? string.Empty, delimiter);
+            });
+
+            builder.AppendLine(string.Join(delimiter, values));
+        }
+
+        return builder.ToString().TrimEnd('\r', '\n');
+    }
+
+    private static string BuildPlainDelimited<TData>(ExportContext<TData> context, bool includeHeaders, char delimiter)
+    {
+        var builder = new StringBuilder();
+        var separator = delimiter.ToString();
+
+        if (includeHeaders)
+        {
+            var headers = context.Columns.Select(c => EscapeClipboardValue(c.ColumnDef.Header?.ToString() ?? c.Id));
+            builder.AppendLine(string.Join(separator, headers));
+        }
+
+        foreach (var row in context.Rows)
+        {
+            var values = context.Columns.Select(column =>
+            {
+                var value = ExtractCellValue(row, column.Id);
+                return EscapeClipboardValue(value?.ToString() ?? string.Empty);
+            });
+
+            builder.AppendLine(string.Join(separator, values));
+        }
+
+        return builder.ToString().TrimEnd('\r', '\n');
+    }
+
+    private static string BuildJson<TData>(ExportContext<TData> context)
+    {
+        var payload = context.Rows.Select(row =>
         {
             var obj = new Dictionary<string, object?>();
-            foreach (var column in grid.VisibleLeafColumns)
+            foreach (var column in context.Columns)
             {
-                var cell = row.GetCell(column.Id);
-                obj[column.Id] = cell.Value;
+                obj[column.Id] = ExtractCellValue(row, column.Id);
             }
+
             return obj;
         }).ToList();
 
-        return JsonSerializer.Serialize(data, new JsonSerializerOptions
+        return JsonSerializer.Serialize(payload, new JsonSerializerOptions
         {
             WriteIndented = true
         });
     }
 
-    private static byte[] BuildExcel<TData>(SaGrid<TData> grid)
+    private static byte[] BuildExcel<TData>(ExportContext<TData> context)
     {
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true))
@@ -107,57 +210,39 @@ public class ExportService
             WriteEntry(archive, "xl/workbook.xml", BuildWorkbookXml());
             WriteEntry(archive, "xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml());
             WriteEntry(archive, "xl/styles.xml", BuildStylesXml());
-            WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildWorksheetXml(grid));
+            WriteEntry(archive, "xl/worksheets/sheet1.xml", BuildWorksheetXml(context));
         }
 
         return stream.ToArray();
     }
 
-    private static string BuildClipboardText<TData>(SaGrid<TData> grid, ClipboardExportFormat format, bool includeHeaders)
-    {
-        var delimiter = format == ClipboardExportFormat.TabDelimited ? "\t" : " ";
-        var builder = new StringBuilder();
-
-        if (includeHeaders)
-        {
-            var headerLine = string.Join(delimiter, grid.VisibleLeafColumns.Select(c => EscapeClipboardValue(c.ColumnDef.Header?.ToString() ?? c.Id)));
-            builder.AppendLine(headerLine);
-        }
-
-        foreach (var row in grid.RowModel.FlatRows)
-        {
-            var values = grid.VisibleLeafColumns.Select(column =>
-            {
-                var cell = row.GetCell(column.Id);
-                return EscapeClipboardValue(cell.Value?.ToString() ?? string.Empty);
-            });
-
-            builder.AppendLine(string.Join(delimiter, values));
-        }
-
-        return builder.ToString().TrimEnd('\r', '\n');
-    }
-
-    private static string BuildWorksheetXml<TData>(SaGrid<TData> grid)
+    private static string BuildWorksheetXml<TData>(ExportContext<TData> context)
     {
         var sb = new StringBuilder();
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
         sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
 
-        var visibleColumns = grid.VisibleLeafColumns.ToList();
-        var rows = grid.RowModel.FlatRows;
-
-        AppendRow(sb, visibleColumns.Select(c => c.ColumnDef.Header?.ToString() ?? c.Id), 1);
+        AppendRow(sb, context.Columns.Select(c => c.ColumnDef.Header?.ToString() ?? c.Id), 1);
 
         var excelRowIndex = 2;
-        foreach (var row in rows)
+        foreach (var row in context.Rows)
         {
-            var values = visibleColumns.Select(column => row.GetCell(column.Id).Value?.ToString() ?? string.Empty).ToList();
+            var values = context.Columns.Select(column => ExtractCellValue(row, column.Id)?.ToString() ?? string.Empty).ToList();
             AppendRow(sb, values, excelRowIndex++);
         }
 
         sb.Append("</sheetData></worksheet>");
         return sb.ToString();
+    }
+
+    private static object? ExtractCellValue<TData>(Row<TData> row, string columnId)
+    {
+        if (row.TryGetAggregatedValue(columnId, out var aggregated))
+        {
+            return aggregated;
+        }
+
+        return row.GetCell(columnId).Value;
     }
 
     private static void AppendRow(StringBuilder sb, IEnumerable<string> values, int rowIndex)
@@ -283,19 +368,22 @@ public class ExportService
         return value.Replace("\r", " ").Replace("\n", " ");
     }
 
-    private static string EscapeCsvValue(string value)
+    private static string EscapeCsvValue(string value, char delimiter)
     {
         if (string.IsNullOrEmpty(value))
         {
             return string.Empty;
         }
 
-        if (value.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0)
+        var requiresQuotes = value.IndexOfAny(new[] { '\"', '\n', '\r' }) >= 0 || value.Contains(delimiter);
+        if (!requiresQuotes)
         {
-            var escaped = value.Replace("\"", "\"\"");
-            return $"\"{escaped}\"";
+            return value;
         }
 
-        return value;
+        var escaped = value.Replace("\"", "\"\"");
+        return $"\"{escaped}\"";
     }
+
+    private sealed record ExportContext<TData>(IReadOnlyList<Column<TData>> Columns, IReadOnlyList<Row<TData>> Rows);
 }

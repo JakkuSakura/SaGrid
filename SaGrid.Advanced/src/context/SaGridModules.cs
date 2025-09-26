@@ -3,6 +3,7 @@ using SaGrid.Advanced.Events;
 using SaGrid.Advanced.Modules.Aggregation;
 using SaGrid.Advanced.Modules.Filters;
 using SaGrid.Advanced.Modules.Editing;
+using SaGrid.Advanced.Modules.Analytics;
 using SaGrid.Advanced.Modules.RowGrouping;
 using SaGrid.Advanced.Modules.SideBar;
 using SaGrid.Advanced.Modules.StatusBar;
@@ -42,7 +43,8 @@ internal static class SaGridModules
                 new StatusBarModule(),
                 new SortingEnhancementsModule(),
                 new CellSelectionModule(),
-                new ExportModule()
+                new ExportModule(),
+                new AnalyticsModule()
             });
 
             _initialized = true;
