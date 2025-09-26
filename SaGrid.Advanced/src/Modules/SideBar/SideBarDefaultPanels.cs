@@ -20,8 +20,8 @@ public static class SideBarDefaultPanels
     {
         return new List<SideBarPanelDefinition>
         {
-            new SideBarPanelDefinition(ColumnManagerId, "Columns", () => new ColumnManagerView<TData>(grid)),
-            new SideBarPanelDefinition(InfoPanelId, "Info", () => new InfoPanelView<TData>(grid))
+            new SideBarPanelDefinition(ColumnManagerId, "Columns", () => new ColumnManagerView<TData>(grid), SideBarIcons.Columns),
+            new SideBarPanelDefinition(InfoPanelId, "Info", () => new InfoPanelView<TData>(grid), SideBarIcons.Info)
         };
     }
 

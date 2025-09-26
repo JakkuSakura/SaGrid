@@ -1,16 +1,22 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Avalonia;
-using SaGrid.Core;
-using SaGrid;
-using SolidAvalonia;
-using static SolidAvalonia.Solid;
-using System.Diagnostics;
 using Avalonia.Threading;
+using SaGrid;
+using SaGrid.Advanced.Interfaces;
 using SaGrid.Advanced.Modules.SideBar;
 using SaGrid.Advanced.Modules.StatusBar;
+using SaGrid.Advanced.RowModel;
+using SaGrid.Core;
+using SolidAvalonia;
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using static SolidAvalonia.Solid;
 
 namespace Examples;
 
@@ -22,11 +28,170 @@ public class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+}
+
+internal sealed class InMemoryPersonServerDataSource : IServerSideDataSource<Person>
+{
+    private readonly List<Person> _allRows;
+    private readonly int _blockSize;
+    private readonly HashSet<int> _loadedIndexes = new();
+    private readonly object _sync = new();
+
+    public InMemoryPersonServerDataSource(IEnumerable<Person> rows, int blockSize)
+    {
+        _allRows = rows.ToList();
+        _blockSize = Math.Max(1, blockSize);
+    }
+
+    public int TotalCount => _allRows.Count;
+
+    public int LoadedRowCount
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _loadedIndexes.Count;
+            }
+        }
+    }
+
+    public async Task<ServerSideRowsResult<Person>> GetRowsAsync(ServerSideRowsRequest request, CancellationToken cancellationToken = default)
+    {
+        await Task.Delay(150, cancellationToken); // simulate latency
+
+        IEnumerable<Person> query = _allRows;
+
+        if (request.FilterModel.TryGetValue("__global", out var globalFilter) &&
+            globalFilter is string term && !string.IsNullOrWhiteSpace(term))
+        {
+            query = ApplyGlobalFilter(query, term);
+        }
+
+        query = ApplyColumnFilters(query, request.FilterModel);
+        query = ApplySorts(query, request.SortModel);
+
+        var filtered = query.ToList();
+        var start = Math.Clamp(request.StartRow, 0, filtered.Count);
+        var end = Math.Clamp(request.EndRow, start, filtered.Count);
+        var rows = filtered.Skip(start).Take(end - start).ToList();
+
+        lock (_sync)
+        {
+            for (var i = 0; i < rows.Count; i++)
+            {
+                _loadedIndexes.Add(start + i);
+            }
+        }
+
+        var lastRow = end >= filtered.Count ? filtered.Count : (int?)null;
+        return new ServerSideRowsResult<Person>(rows, lastRow);
+    }
+
+    private static IEnumerable<Person> ApplyGlobalFilter(IEnumerable<Person> source, string term)
+    {
+        var lowered = term.Trim().ToLowerInvariant();
+        return source.Where(p => p.FirstName.ToLowerInvariant().Contains(lowered)
+                                 || p.LastName.ToLowerInvariant().Contains(lowered)
+                                 || p.Email.ToLowerInvariant().Contains(lowered)
+                                 || p.Department.ToLowerInvariant().Contains(lowered));
+    }
+
+    private static IEnumerable<Person> ApplyColumnFilters(IEnumerable<Person> source, IReadOnlyDictionary<string, object?> filters)
+    {
+        if (filters == null)
+        {
+            return source;
+        }
+
+        IEnumerable<Person> query = source;
+
+        foreach (var filter in filters)
+        {
+            if (string.Equals(filter.Key, "__global", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (filter.Value is null)
+            {
+                continue;
+            }
+
+            var acceptedValues = ExtractFilterValues(filter.Value);
+            if (acceptedValues == null || acceptedValues.Count == 0)
+            {
+                continue;
+            }
+
+            query = query.Where(row => acceptedValues.Contains(GetFieldValue(row, filter.Key)?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase));
+        }
+
+        return query;
+    }
+
+    private static IReadOnlyCollection<string>? ExtractFilterValues(object value)
+    {
+        return value switch
+        {
+            string s => new[] { s },
+            bool b => new[] { b.ToString() },
+            IEnumerable<string> enumerable => enumerable.ToList(),
+            IEnumerable<object?> objects => objects.Select(o => o?.ToString() ?? string.Empty).ToList(),
+            _ => null
+        };
+    }
+
+    private static IEnumerable<Person> ApplySorts(IEnumerable<Person> source, IReadOnlyList<ColumnSort> sortModel)
+    {
+        if (sortModel == null || sortModel.Count == 0)
+        {
+            return source;
+        }
+
+        IOrderedEnumerable<Person>? ordered = null;
+
+        foreach (var sort in sortModel)
+        {
+            Func<Person, object?> keySelector = row => GetFieldValue(row, sort.Id);
+
+            ordered = ordered == null
+                ? (sort.Direction == SortDirection.Descending
+                    ? source.OrderByDescending(keySelector)
+                    : source.OrderBy(keySelector))
+                : (sort.Direction == SortDirection.Descending
+                    ? ordered.ThenByDescending(keySelector)
+                    : ordered.ThenBy(keySelector));
+        }
+
+        return ordered ?? source;
+    }
+
+    private static object? GetFieldValue(Person row, string columnId)
+    {
+        return columnId switch
+        {
+            "id" => row.Id,
+            "firstName" => row.FirstName,
+            "lastName" => row.LastName,
+            "age" => row.Age,
+            "email" => row.Email,
+            "department" => row.Department,
+            "isActive" => row.IsActive,
+            _ => null
+        };
+    }
+}
+
+    private void OnRowDataChanged(object? sender, EventArgs e)
+    {
+        Dispatcher.UIThread.Post(UpdateInfoText);
     }
 
     private const string ColumnPanelId = "columnManager";
 
     private SaGrid<Person> saGrid = null!;
+    private InMemoryPersonServerDataSource? _dataSource;
     private TextBlock infoTextBlock = null!;
     private Button _multiSortBtn = null!;
     private Button _resetFiltersBtn = null!;
@@ -43,8 +208,9 @@ public class MainWindow : Window
         Width = 1400;
         Height = 900;
 
-        // Generate larger sample data to showcase advanced features
-        var people = GenerateLargeDataset(100);
+        // Generate larger sample data but keep it on the server-side datasource
+        var allPeople = GenerateLargeDataset(5000).ToList();
+        _dataSource = new InMemoryPersonServerDataSource(allPeople, blockSize: 200);
 
         // Define advanced columns with sorting and filtering capabilities
         var columns = new List<ColumnDef<Person>>
@@ -61,7 +227,7 @@ public class MainWindow : Window
         // Create SaGrid.Advanced with advanced features enabled
         var options = new TableOptions<Person>
         {
-            Data = people,
+            Data = Array.Empty<Person>(),
             Columns = columns.AsReadOnly(),
             EnableSorting = true,
             EnableGlobalFilter = true,
@@ -70,6 +236,11 @@ public class MainWindow : Window
             EnableRowSelection = true,
             EnableCellSelection = true,
             EnableColumnResizing = true,
+            Meta = new Dictionary<string, object>
+            {
+                ["rowModelType"] = RowModelType.ServerSide,
+                ["serverSideBlockSize"] = 200
+            },
             OnStateChange = state =>
             {
                 // Keep info bar and control button labels in sync with state
@@ -86,8 +257,14 @@ public class MainWindow : Window
         };
 
         saGrid = new SaGrid<Person>(options);
+        saGrid.RowDataChanged += OnRowDataChanged;
         _sideBarService = saGrid.GetSideBarService();
         _sideBarService.StateChanged += OnSideBarStateChanged;
+
+        if (_dataSource != null)
+        {
+            saGrid.SetServerSideDataSource(_dataSource);
+        }
 
         // Configure SaGrid.Advanced advanced features
         ConfigureSaGridFeatures();
@@ -108,6 +285,11 @@ public class MainWindow : Window
         if (_sideBarService != null)
         {
             _sideBarService.StateChanged -= OnSideBarStateChanged;
+        }
+
+        if (saGrid != null)
+        {
+            saGrid.RowDataChanged -= OnRowDataChanged;
         }
     }
 
@@ -372,7 +554,8 @@ public class MainWindow : Window
     {
         if (infoTextBlock != null && saGrid != null)
         {
-            var visibleRows = saGrid.RowModel.Rows.Count;
+            var approxRows = saGrid.GetApproximateRowCount();
+            var loadedRows = _dataSource?.LoadedRowCount ?? 0;
             var totalColumns = saGrid.AllLeafColumns.Count;
             var visibleColumns = saGrid.VisibleLeafColumns.Count;
             var hasGlobalFilter = saGrid.State.GlobalFilter != null;
@@ -381,20 +564,19 @@ public class MainWindow : Window
             var sideBarState = saGrid.IsSideBarVisible() ? "Visible" : "Hidden";
             var statusBarState = saGrid.IsStatusBarVisible() ? "Visible" : "Hidden";
             var activePanel = saGrid.GetOpenedToolPanel() ?? "None";
-            
-            // Cell selection info
+
             var selectedCells = saGrid.GetSelectedCells();
             var activeCell = saGrid.GetActiveCell();
-            var cellSelectionInfo = selectedCells.Count > 0 
-                ? $"Selected: {selectedCells.Count} cells" 
+            var cellSelectionInfo = selectedCells.Count > 0
+                ? $"Selected: {selectedCells.Count} cells"
                 : "No selection";
-            
+
             if (activeCell != null)
             {
                 cellSelectionInfo += $" | Active: ({activeCell.Value.RowIndex},{activeCell.Value.ColumnId})";
             }
-            
-            infoTextBlock.Text = $"📊 SaGrid.Advanced Stats: {visibleRows} rows | {visibleColumns}/{totalColumns} columns | " +
+
+            infoTextBlock.Text = $"📊 SaGrid.Advanced Stats: ~{approxRows} rows (loaded {loadedRows}) | {visibleColumns}/{totalColumns} columns | " +
                                $"Multi‑Sort: {multiSort} | Global Filter: {(hasGlobalFilter ? "✅" : "❌")} | " +
                                $"Column Filters: {(hasColumnFilters == true ? "✅" : "❌")} | Side Bar: {sideBarState} ({activePanel}) | " +
                                $"Status Bar: {statusBarState} | 🎯 {cellSelectionInfo}";

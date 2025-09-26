@@ -11,7 +11,8 @@ internal static class FilterPanelDefinition
         return new SideBarPanelDefinition(
             PanelId,
             "Filters",
-            () => new FilterPanelView<TData>(grid, filterService)
+            () => new FilterPanelView<TData>(grid, filterService),
+            SideBarIcons.Filters
         );
     }
 }

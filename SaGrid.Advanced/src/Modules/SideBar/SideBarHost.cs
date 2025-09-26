@@ -1,11 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
-using Avalonia.Layout;
-using Avalonia.Threading;
 using Avalonia.Controls.Primitives;
+using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using SaGrid;
 
 namespace SaGrid.Advanced.Modules.SideBar;
@@ -25,6 +30,9 @@ public class SideBarHost : UserControl
     private readonly Grid _rootGrid;
     private readonly StackPanel _buttonPanel;
     private readonly ContentControl _panelHost;
+    private ToggleButton? _lastFocusedButton;
+    private bool _isVisible;
+    private string? _activePanelId;
 
     public SideBarHost()
     {
@@ -91,6 +99,12 @@ public class SideBarHost : UserControl
             return;
         }
 
+        var wasVisible = _isVisible;
+        var previousActivePanelId = _activePanelId;
+
+        _isVisible = state.IsVisible;
+        _activePanelId = state.ActivePanelId;
+
         IsEnabled = state.IsVisible;
         IsHitTestVisible = state.IsVisible;
         Opacity = state.IsVisible ? 1 : 0;
@@ -99,25 +113,92 @@ public class SideBarHost : UserControl
         ApplyVisibility(state);
         BuildButtons(state);
         UpdateActivePanel();
+
+        if (_isVisible)
+        {
+            if (!wasVisible)
+            {
+                EnsureButtonFocus(force: true, preferredPanelId: _activePanelId);
+            }
+            else if (!string.Equals(previousActivePanelId, _activePanelId, StringComparison.OrdinalIgnoreCase))
+            {
+                EnsureButtonFocus(force: false, preferredPanelId: _activePanelId);
+            }
+        }
     }
 
     private void BuildButtons(SideBarState state)
     {
+        foreach (var existing in _buttonPanel.Children.OfType<ToggleButton>().ToList())
+        {
+            existing.Click -= OnPanelButtonClicked;
+            existing.KeyDown -= OnPanelButtonKeyDown;
+            existing.GotFocus -= OnPanelButtonGotFocus;
+        }
+
         _buttonPanel.Children.Clear();
 
         foreach (var panel in state.Panels)
         {
-            var button = new ToggleButton
-            {
-                Content = panel.Title,
-                Tag = panel.Id,
-                Margin = new Thickness(0, 0, 0, 6),
-                IsChecked = string.Equals(state.ActivePanelId, panel.Id, StringComparison.OrdinalIgnoreCase)
-            };
-
-            button.Click += OnPanelButtonClicked;
+            var button = CreatePanelButton(panel, state.ActivePanelId);
             _buttonPanel.Children.Add(button);
         }
+    }
+
+    private ToggleButton CreatePanelButton(SideBarPanelDefinition panel, string? activePanelId)
+    {
+        var isActive = string.Equals(activePanelId, panel.Id, StringComparison.OrdinalIgnoreCase);
+
+        var button = new ToggleButton
+        {
+            Tag = panel.Id,
+            Margin = new Thickness(0, 0, 0, 6),
+            IsChecked = isActive,
+            Focusable = true,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            ToolTip = panel.Title,
+            Content = CreateButtonContent(panel)
+        };
+
+        AutomationProperties.SetName(button, panel.Title);
+
+        button.Click += OnPanelButtonClicked;
+        button.KeyDown += OnPanelButtonKeyDown;
+        button.GotFocus += OnPanelButtonGotFocus;
+
+        return button;
+    }
+
+    private Control CreateButtonContent(SideBarPanelDefinition panel)
+    {
+        if (!string.IsNullOrWhiteSpace(panel.Icon) && SideBarIconLibrary.TryCreate(panel.Icon, out var iconControl))
+        {
+            var stack = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Spacing = 4
+            };
+
+            stack.Children.Add(iconControl);
+            stack.Children.Add(new TextBlock
+            {
+                Text = panel.Title,
+                TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+
+            return stack;
+        }
+
+        return new TextBlock
+        {
+            Text = panel.Title,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextAlignment = TextAlignment.Center
+        };
     }
 
     private void OnPanelButtonClicked(object? sender, RoutedEventArgs e)
@@ -162,6 +243,134 @@ public class SideBarHost : UserControl
                 child.IsChecked = string.Equals(activePanelIdCurrent, panelId, StringComparison.OrdinalIgnoreCase);
             }
         }
+    }
+
+    private void OnPanelButtonKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (sender is not ToggleButton button)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Down:
+            case Key.Right:
+                MoveFocusRelative(button, +1);
+                e.Handled = true;
+                break;
+            case Key.Up:
+            case Key.Left:
+                MoveFocusRelative(button, -1);
+                e.Handled = true;
+                break;
+            case Key.Home:
+                FocusButton(0);
+                e.Handled = true;
+                break;
+            case Key.End:
+                var buttons = GetButtonList();
+                if (buttons.Count > 0)
+                {
+                    FocusButton(buttons.Count - 1);
+                    e.Handled = true;
+                }
+                break;
+            case Key.Escape:
+                _closePanel?.Invoke();
+                EnsureButtonFocus(force: true);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void OnPanelButtonGotFocus(object? sender, GotFocusEventArgs e)
+    {
+        if (sender is ToggleButton button)
+        {
+            _lastFocusedButton = button;
+        }
+    }
+
+    private void MoveFocusRelative(ToggleButton current, int delta)
+    {
+        var buttons = GetButtonList();
+        if (buttons.Count == 0)
+        {
+            return;
+        }
+
+        var index = buttons.IndexOf(current);
+        if (index < 0 && _lastFocusedButton != null)
+        {
+            index = buttons.IndexOf(_lastFocusedButton);
+        }
+
+        if (index < 0)
+        {
+            index = 0;
+        }
+
+        var nextIndex = (index + delta) % buttons.Count;
+        if (nextIndex < 0)
+        {
+            nextIndex += buttons.Count;
+        }
+
+        FocusButton(nextIndex);
+    }
+
+    private void FocusButton(int index)
+    {
+        var buttons = GetButtonList();
+        if (index < 0 || index >= buttons.Count)
+        {
+            return;
+        }
+
+        buttons[index].Focus();
+    }
+
+    private List<ToggleButton> GetButtonList()
+    {
+        return _buttonPanel.Children.OfType<ToggleButton>().ToList();
+    }
+
+    // Mirrors AG Grid's ManagedFocusFeature by keeping navigation inside the strip and restoring focus when reopened.
+    private void EnsureButtonFocus(bool force, string? preferredPanelId = null)
+    {
+        if (!_isVisible)
+        {
+            return;
+        }
+
+        var buttons = GetButtonList();
+        if (buttons.Count == 0)
+        {
+            return;
+        }
+
+        if (!force)
+        {
+            var current = FocusManager.Instance?.Current as IVisual;
+            if (current != null && _buttonPanel.IsVisualAncestorOf(current))
+            {
+                return;
+            }
+        }
+
+        ToggleButton? target = null;
+
+        if (!string.IsNullOrEmpty(preferredPanelId))
+        {
+            target = buttons.FirstOrDefault(b => string.Equals(b.Tag as string, preferredPanelId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        target ??= buttons.FirstOrDefault(b => b.IsChecked == true);
+        target ??= buttons[0];
+
+        var buttonToFocus = target;
+        Dispatcher.UIThread.Post(() => buttonToFocus.Focus());
     }
 
     private void UpdateLayoutForPosition(SideBarPosition position)
