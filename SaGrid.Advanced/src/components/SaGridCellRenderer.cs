@@ -41,47 +41,11 @@ internal class SaGridCellRenderer<TData>
 
     public Control CreateReactiveCell(SaGrid<TData> saGrid, Row<TData> row, Column<TData> column, Func<SaGrid<TData>> gridSignalGetter, Func<int>? selectionSignalGetter = null)
     {
-        return Reactive(() =>
-        {
-            // Access both the grid signal and selection signal to detect state changes
-            var currentGrid = gridSignalGetter(); // Get current grid from reactive signal
-            var selectionCounter = selectionSignalGetter?.Invoke() ?? 0; // This ensures reactivity when selection changes
-            
-            var isSelected = currentGrid?.IsCellSelected(row.Index, column.Id) ?? false;
-            var activeCell = currentGrid?.GetActiveCell();
-            var isActiveCell = activeCell?.RowIndex == row.Index && activeCell?.ColumnId == column.Id;
-            
-            var background = GetCellBackground(isSelected, isActiveCell, row.Index);
-            var firstColumnId = currentGrid?.VisibleLeafColumns.FirstOrDefault()?.Id;
-            var indent = column.Id == firstColumnId ? row.Depth * 16 : 0;
-
-            var displayFactory = new Func<Control>(() => new TextBlock()
-                .Text(SaGridContentHelper<TData>.GetCellContent(row, column))
-                .VerticalAlignment(VerticalAlignment.Center)
-                .HorizontalAlignment(HorizontalAlignment.Left)
-                .Margin(new Thickness(8 + indent, 0, 0, 0)));
-
-            var border = new Border()
-                .BorderThickness(0, 0, 1, 1)
-                .BorderBrush(Brushes.LightGray)
-                .Background(background)
-                .Width(column.Size)
-                .Height(30);
-
-            border.Child = new EditingCellPresenter<TData>(saGrid, row, column, displayFactory);
-
-            border.PointerPressed += (sender, e) =>
-            {
-                var isCtrlPressed = e.KeyModifiers.HasFlag(KeyModifiers.Control);
-                currentGrid?.SelectCell(row.Index, column.Id, isCtrlPressed);
-                e.Handled = true;
-            };
-
-            return border;
-        });
+        var gridSignal = gridSignalGetter ?? (() => saGrid);
+        return new ReactiveCellComponent<TData>(saGrid, row, column, gridSignal, selectionSignalGetter, this);
     }
 
-    private IBrush GetCellBackground(bool isSelected, bool isActiveCell, int rowIndex)
+    internal IBrush GetCellBackground(bool isSelected, bool isActiveCell, int rowIndex)
     {
         if (isActiveCell)
         {
@@ -97,6 +61,102 @@ internal class SaGridCellRenderer<TData>
         return rowIndex % 2 == 0 
             ? Brushes.White 
             : new SolidColorBrush(Color.FromRgb(248, 248, 248)); // Very light gray
+    }
+}
+
+internal sealed class ReactiveCellComponent<TData> : Component
+{
+    private readonly SaGrid<TData> _grid;
+    private readonly Row<TData> _row;
+    private readonly Column<TData> _column;
+    private readonly Func<SaGrid<TData>> _gridSignalGetter;
+    private readonly Func<int>? _selectionSignalGetter;
+    private readonly SaGridCellRenderer<TData> _renderer;
+
+    private Border? _border;
+    private EditingCellPresenter<TData>? _presenter;
+    private double _indent;
+
+    public ReactiveCellComponent(
+        SaGrid<TData> grid,
+        Row<TData> row,
+        Column<TData> column,
+        Func<SaGrid<TData>> gridSignalGetter,
+        Func<int>? selectionSignalGetter,
+        SaGridCellRenderer<TData> renderer) : base(true)
+    {
+        _grid = grid;
+        _row = row;
+        _column = column;
+        _gridSignalGetter = gridSignalGetter;
+        _selectionSignalGetter = selectionSignalGetter;
+        _renderer = renderer;
+    }
+
+    protected override object Build()
+    {
+        _border = new Border()
+            .BorderThickness(0, 0, 1, 1)
+            .BorderBrush(Brushes.LightGray)
+            .Width(_column.Size)
+            .Height(30);
+
+        Func<Control> displayFactory = () => new TextBlock()
+            .Text(SaGridContentHelper<TData>.GetCellContent(_row, _column))
+            .VerticalAlignment(VerticalAlignment.Center)
+            .HorizontalAlignment(HorizontalAlignment.Left)
+            .Margin(new Thickness(8 + _indent, 0, 0, 0));
+
+        _presenter = new EditingCellPresenter<TData>(_grid, _row, _column, displayFactory);
+        _border.Child = _presenter;
+
+        _border.PointerPressed += OnPointerPressed;
+
+        CreateEffect(UpdateVisualState);
+
+        return _border;
+    }
+
+    private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        var isCtrlPressed = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        _grid.SelectCell(_row.Index, _column.Id, isCtrlPressed);
+        e.Handled = true;
+    }
+
+    private void UpdateVisualState()
+    {
+        var currentGrid = _gridSignalGetter();
+        var selectionToken = _selectionSignalGetter?.Invoke() ?? 0;
+        _ = selectionToken; // ensure dependency tracking
+
+        if (_border == null)
+        {
+            return;
+        }
+
+        var isSelected = currentGrid?.IsCellSelected(_row.Index, _column.Id) ?? false;
+        var activeCell = currentGrid?.GetActiveCell();
+        var isActiveCell = activeCell?.RowIndex == _row.Index && activeCell?.ColumnId == _column.Id;
+
+        var firstColumnId = currentGrid?.VisibleLeafColumns.FirstOrDefault()?.Id;
+        _indent = _column.Id == firstColumnId ? _row.Depth * 16 : 0;
+
+        _border.Background = _renderer.GetCellBackground(isSelected, isActiveCell, _row.Index);
+
+        if (_presenter?.Content is Control content)
+        {
+            content.Margin = new Thickness(8 + _indent, 0, 0, 0);
+        }
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        if (_border != null)
+        {
+            _border.PointerPressed -= OnPointerPressed;
+        }
     }
 }
 
