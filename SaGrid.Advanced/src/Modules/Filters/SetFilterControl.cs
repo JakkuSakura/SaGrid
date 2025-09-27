@@ -69,16 +69,13 @@ internal sealed class SetFilterControl<TData> : UserControl
         _searchBox.TextChanged += (_, _) => ApplySearch();
         header.Children.Add(_searchBox);
 
-        var buttonRow = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6,
-            Margin = new Thickness(0, 0, 0, 8)
-        };
-
         var selectAllButton = new Button
         {
-            Content = "Select All"
+            Content = "Select All",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            MinHeight = 28,
+            Margin = new Thickness(0, 0, 0, 6)
         };
         selectAllButton.Click += (_, _) =>
         {
@@ -91,7 +88,11 @@ internal sealed class SetFilterControl<TData> : UserControl
 
         var clearButton = new Button
         {
-            Content = "Clear"
+            Content = "Clear",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            MinHeight = 28,
+            Margin = new Thickness(0, 0, 0, 6)
         };
         clearButton.Click += (_, _) =>
         {
@@ -104,7 +105,11 @@ internal sealed class SetFilterControl<TData> : UserControl
 
         var resetButton = new Button
         {
-            Content = "Reset"
+            Content = "Reset",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            MinHeight = 28,
+            Margin = new Thickness(0, 0, 0, 8)
         };
         resetButton.Click += (_, _) =>
         {
@@ -112,10 +117,9 @@ internal sealed class SetFilterControl<TData> : UserControl
             BuildValueList();
         };
 
-        buttonRow.Children.Add(selectAllButton);
-        buttonRow.Children.Add(clearButton);
-        buttonRow.Children.Add(resetButton);
-        header.Children.Add(buttonRow);
+        header.Children.Add(selectAllButton);
+        header.Children.Add(clearButton);
+        header.Children.Add(resetButton);
 
         DockPanel.SetDock(header, Dock.Top);
         layout.Children.Add(header);
