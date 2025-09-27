@@ -72,16 +72,20 @@ public class SaGridComponent<TData> : Component
 
             var (gridGetter, gridSetter) = _gridSignal.Value;
             var (selectionGetter, selectionSetter) = _selectionSignal.Value;
-            var counter = 0;
+            var selectionCounter = 0;
 
-            _saGrid.SetUIUpdateCallback(() =>
-            {
-                counter++;
-                _themeTick++;
-                gridSetter?.Invoke(_saGrid);
-                selectionSetter?.Invoke(counter);
-                HandleHeaderStateChanges();
-            });
+            _saGrid.SetUIUpdateCallbacks(
+                () =>
+                {
+                    _themeTick++;
+                    gridSetter?.Invoke(_saGrid);
+                    selectionSetter?.Invoke(++selectionCounter);
+                    HandleHeaderStateChanges();
+                },
+                () =>
+                {
+                    selectionSetter?.Invoke(++selectionCounter);
+                });
         }
 
         // Build the root container once to avoid reparenting and keep header TextBoxes stable

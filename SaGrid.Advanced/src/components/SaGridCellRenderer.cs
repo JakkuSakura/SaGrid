@@ -17,7 +17,7 @@ namespace SaGrid;
 
 internal class SaGridCellRenderer<TData>
 {
-    public Control CreateCell(SaGrid<TData> saGrid, Row<TData> row, Column<TData> column)
+    public Control CreateCell(SaGrid<TData> saGrid, Row<TData> row, Column<TData> column, int displayIndex)
     {
         var firstColumnId = saGrid.VisibleLeafColumns.FirstOrDefault()?.Id;
         var indent = column.Id == firstColumnId ? row.Depth * 16 : 0;
@@ -31,7 +31,7 @@ internal class SaGridCellRenderer<TData>
         var border = new Border()
             .BorderThickness(0, 0, 1, 1)
             .BorderBrush(Brushes.LightGray)
-            .Background(Brushes.White)
+            .Background(GetCellBackground(false, false, displayIndex))
             .Width(column.Size)
             .Height(30);
 
@@ -39,10 +39,16 @@ internal class SaGridCellRenderer<TData>
         return border;
     }
 
-    public Control CreateReactiveCell(SaGrid<TData> saGrid, Row<TData> row, Column<TData> column, Func<SaGrid<TData>> gridSignalGetter, Func<int>? selectionSignalGetter = null)
+    public Control CreateReactiveCell(
+        SaGrid<TData> saGrid,
+        Row<TData> row,
+        Column<TData> column,
+        int displayIndex,
+        Func<SaGrid<TData>> gridSignalGetter,
+        Func<int>? selectionSignalGetter = null)
     {
         var gridSignal = gridSignalGetter ?? (() => saGrid);
-        return new ReactiveCellComponent<TData>(saGrid, row, column, gridSignal, selectionSignalGetter, this);
+        return new ReactiveCellComponent<TData>(saGrid, row, column, displayIndex, gridSignal, selectionSignalGetter, this);
     }
 
     internal IBrush GetCellBackground(bool isSelected, bool isActiveCell, int rowIndex)
@@ -69,6 +75,7 @@ internal sealed class ReactiveCellComponent<TData> : Component
     private readonly SaGrid<TData> _grid;
     private readonly Row<TData> _row;
     private readonly Column<TData> _column;
+    private readonly int _displayIndex;
     private readonly Func<SaGrid<TData>> _gridSignalGetter;
     private readonly Func<int>? _selectionSignalGetter;
     private readonly SaGridCellRenderer<TData> _renderer;
@@ -81,6 +88,7 @@ internal sealed class ReactiveCellComponent<TData> : Component
         SaGrid<TData> grid,
         Row<TData> row,
         Column<TData> column,
+        int displayIndex,
         Func<SaGrid<TData>> gridSignalGetter,
         Func<int>? selectionSignalGetter,
         SaGridCellRenderer<TData> renderer) : base(true)
@@ -88,6 +96,7 @@ internal sealed class ReactiveCellComponent<TData> : Component
         _grid = grid;
         _row = row;
         _column = column;
+        _displayIndex = displayIndex;
         _gridSignalGetter = gridSignalGetter;
         _selectionSignalGetter = selectionSignalGetter;
         _renderer = renderer;
@@ -115,6 +124,7 @@ internal sealed class ReactiveCellComponent<TData> : Component
         _border.Child = _presenter;
 
         _border.PointerPressed += OnPointerPressed;
+        _border.Background = _renderer.GetCellBackground(false, false, _displayIndex);
 
         CreateEffect(UpdateVisualState);
 
@@ -124,7 +134,7 @@ internal sealed class ReactiveCellComponent<TData> : Component
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var isCtrlPressed = e.KeyModifiers.HasFlag(KeyModifiers.Control);
-        _grid.SelectCell(_row.Index, _column.Id, isCtrlPressed);
+        _grid.SelectCell(_displayIndex, _column.Id, isCtrlPressed);
         e.Handled = true;
     }
 
@@ -139,14 +149,14 @@ internal sealed class ReactiveCellComponent<TData> : Component
             return;
         }
 
-        var isSelected = currentGrid?.IsCellSelected(_row.Index, _column.Id) ?? false;
+        var isSelected = currentGrid?.IsCellSelected(_displayIndex, _column.Id) ?? false;
         var activeCell = currentGrid?.GetActiveCell();
-        var isActiveCell = activeCell?.RowIndex == _row.Index && activeCell?.ColumnId == _column.Id;
+        var isActiveCell = activeCell?.RowIndex == _displayIndex && activeCell?.ColumnId == _column.Id;
 
         var firstColumnId = currentGrid?.VisibleLeafColumns.FirstOrDefault()?.Id;
         _indent = _column.Id == firstColumnId ? _row.Depth * 16 : 0;
 
-        _border.Background = _renderer.GetCellBackground(isSelected, isActiveCell, _row.Index);
+        _border.Background = _renderer.GetCellBackground(isSelected, isActiveCell, _displayIndex);
 
         if (_presenter?.Content is Control content)
         {

@@ -28,7 +28,8 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     private string? _quickFilter;
     
     // Callback for UI updates
-    private Action? _onUIUpdate;
+    private Action? _onGridUpdate;
+    private Action? _onSelectionUpdate;
     private readonly ExportService _exportService;
     private readonly CellSelectionService _cellSelectionService;
     private readonly SortingEnhancementsService _sortingEnhancementsService;
@@ -738,9 +739,15 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
 
     // Cell selection functionality
     // Method for UI to set update callback
+    public void SetUIUpdateCallbacks(Action? gridCallback, Action? selectionCallback)
+    {
+        _onGridUpdate = gridCallback;
+        _onSelectionUpdate = selectionCallback;
+    }
+
     public void SetUIUpdateCallback(Action? callback)
     {
-        _onUIUpdate = callback;
+        SetUIUpdateCallbacks(callback, callback);
     }
 
     internal void UpdateCellValue(string rowId, string columnId, object? value)
@@ -777,11 +784,11 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     {
         try
         {
-            Dispatcher.UIThread.Post(() => _onUIUpdate?.Invoke());
+            Dispatcher.UIThread.Post(() => _onGridUpdate?.Invoke());
         }
         catch
         {
-            _onUIUpdate?.Invoke();
+            _onGridUpdate?.Invoke();
         }
     }
 
@@ -793,7 +800,12 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
 
     internal void NotifyUIUpdate()
     {
-        _onUIUpdate?.Invoke();
+        _onGridUpdate?.Invoke();
+    }
+
+    internal void NotifySelectionUpdate()
+    {
+        _onSelectionUpdate?.Invoke();
     }
 
     private void RaiseModelUpdated(bool newData)

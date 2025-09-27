@@ -180,7 +180,8 @@ internal class SaGridBodyRenderer<TData>
                     continue;
                 }
 
-                var rowControl = CreateRowControl(row);
+                var displayIndex = row.DisplayIndex >= 0 ? row.DisplayIndex : rowIndex;
+                var rowControl = CreateRowControl(row, displayIndex);
                 Canvas.SetTop(rowControl, rowIndex * RowHeight);
                 _canvas.Children.Add(rowControl);
             }
@@ -196,7 +197,7 @@ internal class SaGridBodyRenderer<TData>
             return null;
         }
 
-        private Control CreateRowControl(Row<TData> row)
+        private Control CreateRowControl(Row<TData> row, int displayIndex)
         {
             var panel = new StackPanel
             {
@@ -206,8 +207,8 @@ internal class SaGridBodyRenderer<TData>
             foreach (var column in _grid.VisibleLeafColumns)
             {
                 var control = _gridSignalGetter != null
-                    ? _cellRenderer.CreateReactiveCell(_grid, row, column, _gridSignalGetter, _selectionSignalGetter)
-                    : _cellRenderer.CreateCell(_grid, row, column);
+                    ? _cellRenderer.CreateReactiveCell(_grid, row, column, displayIndex, _gridSignalGetter, _selectionSignalGetter)
+                    : _cellRenderer.CreateCell(_grid, row, column, displayIndex);
 
                 panel.Children.Add(control);
             }

@@ -30,7 +30,7 @@ public class CellSelectionService
             CellSelection = new CellSelectionState(newSelectedCells, cellPosition, null)
         }, updateRowModel: false);
 
-        grid.NotifyUIUpdate();
+        grid.NotifySelectionUpdate();
     }
 
     public void SelectCellRange<TData>(SaGrid<TData> grid, int startRowIndex, string startColumnId, int endRowIndex, string endColumnId)
@@ -71,7 +71,7 @@ public class CellSelectionService
             CellSelection = new CellSelectionState(selectedCells, startPos, range)
         }, updateRowModel: false);
 
-        grid.NotifyUIUpdate();
+        grid.NotifySelectionUpdate();
     }
 
     public void ClearSelection<TData>(SaGrid<TData> grid)
@@ -81,7 +81,7 @@ public class CellSelectionService
             CellSelection = new CellSelectionState()
         }, updateRowModel: false);
 
-        grid.NotifyUIUpdate();
+        grid.NotifySelectionUpdate();
     }
 
     public bool IsCellSelected<TData>(SaGrid<TData> grid, int rowIndex, string columnId)

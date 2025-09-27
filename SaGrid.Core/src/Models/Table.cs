@@ -143,10 +143,13 @@ public class Table<TData> : ITable<TData>
         var expandedRowModel = Options.GetExpandedRowModel?.Invoke(this) ?? groupedRowModel;
         PreExpandedRowModel = expandedRowModel;
 
+        AssignDisplayIndices(expandedRowModel);
+
         var paginatedRowModel = Options.GetPaginationRowModel?.Invoke(this) ?? GetPaginatedRowModel(expandedRowModel);
         PrePaginationRowModel = expandedRowModel;
 
         RowModel = paginatedRowModel;
+        AssignDisplayIndices(RowModel);
 
         UpdateRowMap();
     }
@@ -164,6 +167,7 @@ public class Table<TData> : ITable<TData>
         foreach (var data in Options.Data)
         {
             var row = new Row<TData>(this, $"{index}", index, data, 0, null);
+            row.SetDisplayIndex(index);
             rows.Add(row);
             flatRows.Add(row);
             rowsById[row.Id] = row;
@@ -216,6 +220,20 @@ public class Table<TData> : ITable<TData>
         foreach (var row in model.FlatRows)
         {
             _rowMap[row.Id] = row;
+        }
+    }
+
+    private static void AssignDisplayIndices(RowModel<TData> model)
+    {
+        var flatRows = model.FlatRows;
+        if (flatRows == null || flatRows.Count == 0)
+        {
+            return;
+        }
+
+        for (var i = 0; i < flatRows.Count; i++)
+        {
+            flatRows[i].SetDisplayIndex(i);
         }
     }
 

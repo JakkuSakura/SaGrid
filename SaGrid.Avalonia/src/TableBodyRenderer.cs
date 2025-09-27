@@ -27,10 +27,12 @@ public class TableBodyRenderer<TData>
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         }
 
+        var displayIndex = row.DisplayIndex >= 0 ? row.DisplayIndex : row.Index;
+
         for (var index = 0; index < table.VisibleLeafColumns.Count; index++)
         {
             var column = table.VisibleLeafColumns[index];
-            var cell = _cellRenderer.CreateCell(table, row, column);
+            var cell = _cellRenderer.CreateCell(table, row, column, displayIndex);
             Grid.SetColumn(cell, index);
             grid.Children.Add(cell);
         }

@@ -10,6 +10,7 @@ public class Row<TData> : IRow<TData>
     
     public string Id { get; }
     public int Index { get; }
+    public int DisplayIndex { get; private set; } = -1;
     public TData Original { get; }
     public int Depth { get; }
     public Row<TData>? Parent { get; }
@@ -40,6 +41,11 @@ public class Row<TData> : IRow<TData>
         CreateCells();
         
         parent?.AddSubRow(this);
+    }
+
+    internal void SetDisplayIndex(int displayIndex)
+    {
+        DisplayIndex = displayIndex;
     }
 
     private void CreateCells()
