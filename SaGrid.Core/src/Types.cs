@@ -160,6 +160,12 @@ public record CellSelectionState(HashSet<CellPosition> SelectedCells = null!, Ce
     }
 }
 
+public record CellSelectionDelta(
+    IReadOnlyCollection<CellPosition> Added,
+    IReadOnlyCollection<CellPosition> Removed,
+    CellPosition? ActiveCell,
+    CellRange? Range);
+
 public record ColumnSizingState(Dictionary<string, double> Items = null!)
 {
     public Dictionary<string, double> Items { get; init; } = Items ?? new();

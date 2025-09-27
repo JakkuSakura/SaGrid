@@ -15,6 +15,7 @@ using Avalonia.VisualTree;
 using System.Linq;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 using GridControl = Avalonia.Controls.Grid;
 
@@ -34,6 +35,8 @@ public class SaGridComponent<TData> : Component
     private int _themeTick = 0;
     private string _headerStructureVersion = string.Empty;
     private string _filterVersion = string.Empty;
+    private string _bodyStructureVersion = string.Empty;
+    private ISelectionAwareRowsControl? _virtualizedRowsControl;
 
     // Renderers
     private readonly SaGridHeaderRenderer<TData> _headerRenderer;
@@ -82,8 +85,13 @@ public class SaGridComponent<TData> : Component
                     selectionSetter?.Invoke(++selectionCounter);
                     HandleHeaderStateChanges();
                 },
-                () =>
+                delta =>
                 {
+                    if (delta != null)
+                    {
+                        _virtualizedRowsControl?.ApplySelectionDelta(delta);
+                    }
+
                     selectionSetter?.Invoke(++selectionCounter);
                 });
         }
@@ -120,13 +128,7 @@ public class SaGridComponent<TData> : Component
 
             RebuildHeaderStructure();
 
-            _bodyHost.Content = Reactive(() =>
-            {
-                // Access signals to create reactive dependency
-                var currentGrid = Grid; // uses _gridSignal
-                var selTick = _selectionSignal?.Item1();
-                return _bodyRenderer.CreateBody(currentGrid, () => Grid, _selectionSignal?.Item1);
-            });
+            EnsureBodyControl(force: true);
 
             _footerHost.Content = Reactive(() =>
             {
@@ -142,6 +144,7 @@ public class SaGridComponent<TData> : Component
                 return _footerRenderer.CreateFooter(currentGrid);
             });
         }
+        EnsureBodyControl();
         return _rootBorder!;
     }
 
@@ -165,6 +168,7 @@ public class SaGridComponent<TData> : Component
     {
         var newStructureVersion = ComputeHeaderStructureVersion();
         var newFilterVersion = ComputeFilterVersion();
+        var newBodyVersion = ComputeBodyStructureVersion();
 
         if (!string.Equals(newStructureVersion, _headerStructureVersion, StringComparison.Ordinal))
         {
@@ -177,6 +181,11 @@ public class SaGridComponent<TData> : Component
             _filterVersion = newFilterVersion;
             RefreshFilterTextBoxes();
         }
+
+        if (!string.Equals(newBodyVersion, _bodyStructureVersion, StringComparison.Ordinal))
+        {
+            EnsureBodyControl(force: true);
+        }
     }
 
     private string ComputeHeaderStructureVersion()
@@ -188,6 +197,17 @@ public class SaGridComponent<TData> : Component
         var groupingSignature = string.Join("|", _saGrid.GetGroupedColumnIds());
         var multiSort = _saGrid.IsMultiSortEnabled() ? "1" : "0";
         return $"cols={columnsSignature};sort={sortingSignature};group={groupingSignature};multi={multiSort}";
+    }
+
+    private string ComputeBodyStructureVersion()
+    {
+        var columnSignature = string.Join(
+            "|",
+            _saGrid.VisibleLeafColumns
+                .Select(c => $"{c.Id}:{c.Size.ToString(CultureInfo.InvariantCulture)}:{c.PinnedPosition ?? "-"}")
+                .ToArray());
+
+        return columnSignature;
     }
 
     private string ComputeFilterVersion()
@@ -250,6 +270,25 @@ public class SaGridComponent<TData> : Component
                 textBox.Text = expected;
             }
         }
+    }
+
+    private void EnsureBodyControl(bool force = false)
+    {
+        if (_gridSignal == null || _bodyHost == null)
+        {
+            return;
+        }
+
+        var bodyVersion = ComputeBodyStructureVersion();
+        if (!force && string.Equals(bodyVersion, _bodyStructureVersion, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _bodyStructureVersion = bodyVersion;
+        var bodyControl = _bodyRenderer.CreateBody(Grid, () => Grid, _selectionSignal?.Item1);
+        _virtualizedRowsControl = bodyControl as ISelectionAwareRowsControl;
+        _bodyHost.Content = bodyControl;
     }
 
     private string GetFilterText(string columnId)

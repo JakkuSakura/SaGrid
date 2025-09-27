@@ -5,9 +5,15 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using SaGrid.Advanced.Interfaces;
 using SaGrid.Core;
 
 namespace SaGrid;
+
+internal interface ISelectionAwareRowsControl
+{
+    void ApplySelectionDelta(CellSelectionDelta delta);
+}
 
 internal class SaGridBodyRenderer<TData>
 {
@@ -44,7 +50,7 @@ internal class SaGridBodyRenderer<TData>
         }
     }
 
-    private sealed class VirtualizedRowsControl : ContentControl
+    private sealed class VirtualizedRowsControl : ContentControl, ISelectionAwareRowsControl
     {
         private const double RowHeight = 30;
         private const int Overscan = 4;
@@ -58,6 +64,7 @@ internal class SaGridBodyRenderer<TData>
         private readonly IReadOnlyList<Row<TData>> _initialRows;
         private bool _hasRealRows;
         private int _lastKnownRowCount = -1;
+        private readonly Dictionary<string, RowControlContainer> _rowControlsById = new();
 
         public VirtualizedRowsControl(
             SaGrid<TData> grid,
@@ -140,6 +147,12 @@ internal class SaGridBodyRenderer<TData>
 
             if (totalRows == 0)
             {
+                foreach (var container in _rowControlsById.Values)
+                {
+                    container.Detach(_canvas);
+                }
+
+                _rowControlsById.Clear();
                 _canvas.Children.Clear();
                 _canvas.Height = 0;
                 return;
@@ -151,6 +164,11 @@ internal class SaGridBodyRenderer<TData>
             }
 
             _canvas.Height = totalRows * RowHeight;
+
+            if (force)
+            {
+                PruneStaleControlsIfNeeded();
+            }
 
             var verticalOffset = _scrollViewer.Offset.Y;
             var startIndex = Math.Max(0, (int)(verticalOffset / RowHeight) - Overscan);
@@ -166,7 +184,7 @@ internal class SaGridBodyRenderer<TData>
                 endIndex = Math.Min(totalRows, startIndex + _grid.GetPreferredFetchSize());
             }
 
-            _canvas.Children.Clear();
+            var visibleRowIds = new HashSet<string>();
 
             for (var rowIndex = startIndex; rowIndex < endIndex; rowIndex++)
             {
@@ -174,16 +192,63 @@ internal class SaGridBodyRenderer<TData>
                 if (row == null)
                 {
                     _ = _grid.EnsureDataRangeAsync(rowIndex, rowIndex + _grid.GetPreferredFetchSize());
-                    var placeholder = CreatePlaceholderRow();
-                    Canvas.SetTop(placeholder, rowIndex * RowHeight);
-                    _canvas.Children.Add(placeholder);
                     continue;
                 }
 
                 var displayIndex = row.DisplayIndex >= 0 ? row.DisplayIndex : rowIndex;
-                var rowControl = CreateRowControl(row, displayIndex);
-                Canvas.SetTop(rowControl, rowIndex * RowHeight);
-                _canvas.Children.Add(rowControl);
+                var rowId = row.Id ?? displayIndex.ToString();
+                visibleRowIds.Add(rowId);
+
+                var control = GetOrCreateControl(row, displayIndex, rowId);
+                Canvas.SetTop(control, rowIndex * RowHeight);
+            }
+
+            CleanupObsoleteControls(visibleRowIds);
+        }
+
+        void ISelectionAwareRowsControl.ApplySelectionDelta(CellSelectionDelta delta)
+        {
+            if (delta.Added.Count == 0 && delta.Removed.Count == 0 && delta.ActiveCell == null)
+            {
+                return;
+            }
+
+            UpdateCells(delta.Removed, force: true);
+            UpdateCells(delta.Added, force: true);
+
+            if (delta.ActiveCell is { } active)
+            {
+                UpdateCellVisual(active, force: true);
+            }
+        }
+
+        private void UpdateCells(IEnumerable<CellPosition> cells, bool force)
+        {
+            foreach (var cell in cells)
+            {
+                UpdateCellVisual(cell, force);
+            }
+        }
+
+        private void UpdateCellVisual(CellPosition cell, bool force)
+        {
+            var row = _grid.TryGetDisplayedRow(cell.RowIndex);
+            if (row == null)
+            {
+                return;
+            }
+
+            var displayIndex = row.DisplayIndex >= 0 ? row.DisplayIndex : cell.RowIndex;
+            var rowId = row.Id ?? displayIndex.ToString();
+
+            if (!_rowControlsById.TryGetValue(rowId, out var container))
+            {
+                return;
+            }
+
+            if (container.TryGetCell(cell.ColumnId, out var visual) && visual != null)
+            {
+                visual.Update(row, displayIndex, force);
             }
         }
 
@@ -197,12 +262,80 @@ internal class SaGridBodyRenderer<TData>
             return null;
         }
 
-        private Control CreateRowControl(Row<TData> row, int displayIndex)
+        private Control GetOrCreateControl(Row<TData> row, int displayIndex, string rowId)
+        {
+            if (!_rowControlsById.TryGetValue(rowId, out var container))
+            {
+                container = CreateRowControl(row, displayIndex, rowId);
+                _rowControlsById[rowId] = container;
+            }
+
+            container.Update(row, displayIndex);
+            container.Attach(_canvas);
+            container.Control.Tag = rowId;
+
+            return container.Control;
+        }
+
+        private void CleanupObsoleteControls(HashSet<string> visibleRowIds)
+        {
+            if (_rowControlsById.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var kvp in _rowControlsById)
+            {
+                if (!visibleRowIds.Contains(kvp.Key))
+                {
+                    kvp.Value.Detach(_canvas);
+                }
+            }
+        }
+
+        private void PruneStaleControlsIfNeeded()
+        {
+            if (!_hasRealRows || _rowControlsById.Count == 0)
+            {
+                return;
+            }
+
+            if (_grid.GetActiveRowModelType() == RowModelType.ServerSide)
+            {
+                // Server-side row models manage their own cache; don't prune eagerly.
+                return;
+            }
+
+            var currentRowIds = _grid.RowModel.FlatRows.Select(r => r.Id).ToHashSet();
+            if (currentRowIds.Count == 0)
+            {
+                return;
+            }
+
+            var staleIds = _rowControlsById.Keys
+                .Where(id => !currentRowIds.Contains(id))
+                .ToList();
+
+            foreach (var staleId in staleIds)
+            {
+                if (_rowControlsById.TryGetValue(staleId, out var container))
+                {
+                    container.Detach(_canvas);
+                }
+
+                _rowControlsById.Remove(staleId);
+            }
+        }
+
+        private RowControlContainer CreateRowControl(Row<TData> row, int displayIndex, string rowId)
         {
             var panel = new StackPanel
             {
                 Orientation = Orientation.Horizontal
             };
+
+            var cellVisuals = new List<IReusableCellVisual<TData>>();
+            var cellVisualsByColumn = new Dictionary<string, IReusableCellVisual<TData>>();
 
             foreach (var column in _grid.VisibleLeafColumns)
             {
@@ -210,10 +343,72 @@ internal class SaGridBodyRenderer<TData>
                     ? _cellRenderer.CreateReactiveCell(_grid, row, column, displayIndex, _gridSignalGetter, _selectionSignalGetter)
                     : _cellRenderer.CreateCell(_grid, row, column, displayIndex);
 
+                if (control is IReusableCellVisual<TData> reusable)
+                {
+                    cellVisuals.Add(reusable);
+                    cellVisualsByColumn[column.Id] = reusable;
+                }
+
                 panel.Children.Add(control);
             }
 
-            return panel;
+            panel.Tag = rowId;
+            return new RowControlContainer(panel, cellVisuals, cellVisualsByColumn);
+        }
+
+        private sealed class RowControlContainer
+        {
+            private readonly Control _control;
+            private readonly List<IReusableCellVisual<TData>> _cellVisuals;
+            private readonly Dictionary<string, IReusableCellVisual<TData>> _cellVisualsByColumn;
+
+            public RowControlContainer(
+                Control control,
+                List<IReusableCellVisual<TData>> cellVisuals,
+                Dictionary<string, IReusableCellVisual<TData>> cellVisualsByColumn)
+            {
+                _control = control;
+                _cellVisuals = cellVisuals;
+                _cellVisualsByColumn = cellVisualsByColumn;
+            }
+
+            public Control Control => _control;
+            public bool IsAttached { get; private set; }
+
+            public void Attach(Canvas canvas)
+            {
+                if (IsAttached)
+                {
+                    return;
+                }
+
+                canvas.Children.Add(_control);
+                IsAttached = true;
+            }
+
+            public void Detach(Canvas canvas)
+            {
+                if (!IsAttached)
+                {
+                    return;
+                }
+
+                canvas.Children.Remove(_control);
+                IsAttached = false;
+            }
+
+            public void Update(Row<TData> row, int displayIndex, bool force = false)
+            {
+                for (var i = 0; i < _cellVisuals.Count; i++)
+                {
+                    _cellVisuals[i].Update(row, displayIndex, force);
+                }
+            }
+
+            public bool TryGetCell(string columnId, out IReusableCellVisual<TData>? cell)
+            {
+                return _cellVisualsByColumn.TryGetValue(columnId, out cell);
+            }
         }
 
         private static Control CreatePlaceholderRow()

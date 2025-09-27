@@ -21,16 +21,22 @@ public class CellSelectionService
         var cellPosition = new CellPosition(rowIndex, columnId);
         var currentSelection = grid.State.CellSelection ?? new CellSelectionState();
 
-        HashSet<CellPosition> newSelectedCells = addToSelection
-            ? new HashSet<CellPosition>(currentSelection.SelectedCells) { cellPosition }
-            : new HashSet<CellPosition> { cellPosition };
+        var newSelectedCells = addToSelection
+            ? new HashSet<CellPosition>(currentSelection.SelectedCells)
+            : new HashSet<CellPosition>();
+
+        newSelectedCells.Add(cellPosition);
+
+        var added = newSelectedCells.Except(currentSelection.SelectedCells).ToList();
+        var removed = currentSelection.SelectedCells.Except(newSelectedCells).ToList();
 
         grid.SetState(state => state with
         {
             CellSelection = new CellSelectionState(newSelectedCells, cellPosition, null)
         }, updateRowModel: false);
 
-        grid.NotifySelectionUpdate();
+        var delta = new CellSelectionDelta(added, removed, cellPosition, null);
+        grid.NotifySelectionUpdate(delta);
     }
 
     public void SelectCellRange<TData>(SaGrid<TData> grid, int startRowIndex, string startColumnId, int endRowIndex, string endColumnId)
@@ -43,6 +49,7 @@ public class CellSelectionService
         var startPos = new CellPosition(startRowIndex, startColumnId);
         var endPos = new CellPosition(endRowIndex, endColumnId);
         var range = new CellRange(startPos, endPos);
+        var currentSelection = grid.State.CellSelection ?? new CellSelectionState();
 
         var selectedCells = new HashSet<CellPosition>();
         var startRow = Math.Min(startRowIndex, endRowIndex);
@@ -71,17 +78,24 @@ public class CellSelectionService
             CellSelection = new CellSelectionState(selectedCells, startPos, range)
         }, updateRowModel: false);
 
-        grid.NotifySelectionUpdate();
+        var added = selectedCells.Except(currentSelection.SelectedCells).ToList();
+        var removed = currentSelection.SelectedCells.Except(selectedCells).ToList();
+        var delta = new CellSelectionDelta(added, removed, startPos, range);
+        grid.NotifySelectionUpdate(delta);
     }
 
     public void ClearSelection<TData>(SaGrid<TData> grid)
     {
+        var currentSelection = grid.State.CellSelection ?? new CellSelectionState();
+        var removed = currentSelection.SelectedCells.ToList();
+
         grid.SetState(state => state with
         {
             CellSelection = new CellSelectionState()
         }, updateRowModel: false);
 
-        grid.NotifySelectionUpdate();
+        var delta = new CellSelectionDelta(Array.Empty<CellPosition>(), removed, null, null);
+        grid.NotifySelectionUpdate(delta);
     }
 
     public bool IsCellSelected<TData>(SaGrid<TData> grid, int rowIndex, string columnId)

@@ -29,7 +29,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     
     // Callback for UI updates
     private Action? _onGridUpdate;
-    private Action? _onSelectionUpdate;
+    private Action<CellSelectionDelta?>? _onSelectionUpdate;
     private readonly ExportService _exportService;
     private readonly CellSelectionService _cellSelectionService;
     private readonly SortingEnhancementsService _sortingEnhancementsService;
@@ -539,22 +539,19 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     public new void SetSorting(IEnumerable<ColumnSort> sorts)
     {
         base.SetSorting(sorts);
-        ScheduleUIUpdate();
-        RaiseModelUpdated(false);
+        RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Sort));
     }
 
     public new void ToggleSort(string columnId)
     {
         base.ToggleSort(columnId);
-        ScheduleUIUpdate();
-        RaiseModelUpdated(false);
+        RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Sort));
     }
 
     public new void SetSorting(string columnId, SortDirection direction)
     {
         base.SetSorting(columnId, direction);
-        ScheduleUIUpdate();
-        RaiseModelUpdated(false);
+        RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Sort));
     }
 
     public string RenderCell(Row<TData> row, string columnId)
@@ -739,7 +736,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
 
     // Cell selection functionality
     // Method for UI to set update callback
-    public void SetUIUpdateCallbacks(Action? gridCallback, Action? selectionCallback)
+    public void SetUIUpdateCallbacks(Action? gridCallback, Action<CellSelectionDelta?>? selectionCallback)
     {
         _onGridUpdate = gridCallback;
         _onSelectionUpdate = selectionCallback;
@@ -747,7 +744,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
 
     public void SetUIUpdateCallback(Action? callback)
     {
-        SetUIUpdateCallbacks(callback, callback);
+        SetUIUpdateCallbacks(callback, callback != null ? _ => callback() : null);
     }
 
     internal void UpdateCellValue(string rowId, string columnId, object? value)
@@ -803,9 +800,9 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _onGridUpdate?.Invoke();
     }
 
-    internal void NotifySelectionUpdate()
+    internal void NotifySelectionUpdate(CellSelectionDelta? delta)
     {
-        _onSelectionUpdate?.Invoke();
+        _onSelectionUpdate?.Invoke(delta);
     }
 
     private void RaiseModelUpdated(bool newData)

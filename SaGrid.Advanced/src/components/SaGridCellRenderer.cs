@@ -15,6 +15,11 @@ using Avalonia.VisualTree;
 
 namespace SaGrid;
 
+internal interface IReusableCellVisual<TData>
+{
+    void Update(Row<TData> row, int displayIndex, bool force = false);
+}
+
 internal class SaGridCellRenderer<TData>
 {
     public Control CreateCell(SaGrid<TData> saGrid, Row<TData> row, Column<TData> column, int displayIndex)
@@ -70,12 +75,12 @@ internal class SaGridCellRenderer<TData>
     }
 }
 
-internal sealed class ReactiveCellComponent<TData> : Component
+internal sealed class ReactiveCellComponent<TData> : Component, IReusableCellVisual<TData>
 {
     private readonly SaGrid<TData> _grid;
     private readonly Row<TData> _row;
     private readonly Column<TData> _column;
-    private readonly int _displayIndex;
+    private int _displayIndex;
     private readonly Func<SaGrid<TData>> _gridSignalGetter;
     private readonly Func<int>? _selectionSignalGetter;
     private readonly SaGridCellRenderer<TData> _renderer;
@@ -100,6 +105,7 @@ internal sealed class ReactiveCellComponent<TData> : Component
         _gridSignalGetter = gridSignalGetter;
         _selectionSignalGetter = selectionSignalGetter;
         _renderer = renderer;
+        _ = _selectionSignalGetter; // suppress unused-field warnings when deltas drive updates
 
         // Activate lifecycle now that required state is assigned.
         OnCreatedCore();
@@ -141,8 +147,6 @@ internal sealed class ReactiveCellComponent<TData> : Component
     private void UpdateVisualState()
     {
         var currentGrid = _gridSignalGetter();
-        var selectionToken = _selectionSignalGetter?.Invoke() ?? 0;
-        _ = selectionToken; // ensure dependency tracking
 
         if (_border == null)
         {
@@ -171,6 +175,17 @@ internal sealed class ReactiveCellComponent<TData> : Component
         {
             _border.PointerPressed -= OnPointerPressed;
         }
+    }
+
+    void IReusableCellVisual<TData>.Update(Row<TData> row, int displayIndex, bool force)
+    {
+        if (!force && _displayIndex == displayIndex)
+        {
+            return;
+        }
+
+        _displayIndex = displayIndex;
+        UpdateVisualState();
     }
 }
 

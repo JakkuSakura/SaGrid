@@ -1,3 +1,4 @@
+using SaGrid.Core;
 using Tests.TestData;
 using Tests.Contracts;
 
@@ -163,5 +164,38 @@ public class CellSelectionTests : PersonContractTestBase
         saGrid.IsCellSelected(0, "firstName").Should().BeTrue("First cell should be selected");
         saGrid.IsCellSelected(1, "lastName").Should().BeTrue("Second cell should be selected");
         saGrid.IsCellSelected(2, "age").Should().BeTrue("Third cell should be selected");
+    }
+
+    [Fact]
+    public void SaGrid_Should_Emit_Targeted_CellSelection_Deltas()
+    {
+        // Arrange
+        var table = CreateTableWithData(PersonTestData.SmallDataset);
+        var saGrid = new SaGrid<TestPerson>(table.Options);
+        CellSelectionDelta? lastDelta = null;
+        saGrid.SetUIUpdateCallbacks(null, delta => lastDelta = delta);
+
+        // Act - select a first cell
+        saGrid.SelectCell(0, "firstName");
+
+        // Assert - only the new cell is reported
+        lastDelta.Should().NotBeNull();
+        lastDelta!.Added.Should().ContainSingle(c => c.RowIndex == 0 && c.ColumnId == "firstName");
+        lastDelta.Removed.Should().BeEmpty();
+
+        // Act - add a second cell using multi-select
+        saGrid.SelectCell(1, "lastName", addToSelection: true);
+
+        // Assert - delta reports only the newly added cell
+        lastDelta.Added.Should().ContainSingle(c => c.RowIndex == 1 && c.ColumnId == "lastName");
+        lastDelta.Removed.Should().BeEmpty();
+
+        // Act - clear the selection
+        saGrid.ClearCellSelection();
+
+        // Assert - delta reports removals for both cells
+        lastDelta.Removed.Should().HaveCount(2);
+        lastDelta.Removed.Should().Contain(c => c.RowIndex == 0 && c.ColumnId == "firstName");
+        lastDelta.Removed.Should().Contain(c => c.RowIndex == 1 && c.ColumnId == "lastName");
     }
 }
