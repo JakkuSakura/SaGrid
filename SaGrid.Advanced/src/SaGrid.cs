@@ -539,18 +539,21 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     {
         base.SetSorting(sorts);
         ScheduleUIUpdate();
+        RaiseModelUpdated(false);
     }
 
     public new void ToggleSort(string columnId)
     {
         base.ToggleSort(columnId);
         ScheduleUIUpdate();
+        RaiseModelUpdated(false);
     }
 
     public new void SetSorting(string columnId, SortDirection direction)
     {
         base.SetSorting(columnId, direction);
         ScheduleUIUpdate();
+        RaiseModelUpdated(false);
     }
 
     public string RenderCell(Row<TData> row, string columnId)

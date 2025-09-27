@@ -131,21 +131,22 @@ public class Table<TData> : ITable<TData>
     private void UpdateRowModel()
     {
         var coreRowModel = GetCoreRowModel();
-        PreFilteredRowModel = coreRowModel;
-
         var filteredRowModel = Options.GetFilteredRowModel?.Invoke(this) ?? GetFilteredRowModel(coreRowModel);
-        PreSortedRowModel = filteredRowModel;
+        PreFilteredRowModel = filteredRowModel;
 
         var sortedRowModel = Options.GetSortedRowModel?.Invoke(this) ?? GetSortedRowModel(filteredRowModel);
-        PreGroupedRowModel = sortedRowModel;
+        PreSortedRowModel = sortedRowModel;
 
         var groupedRowModel = Options.GetGroupedRowModel?.Invoke(this) ?? sortedRowModel;
-        PreExpandedRowModel = groupedRowModel;
+        PreGroupedRowModel = groupedRowModel;
 
         var expandedRowModel = Options.GetExpandedRowModel?.Invoke(this) ?? groupedRowModel;
+        PreExpandedRowModel = expandedRowModel;
+
+        var paginatedRowModel = Options.GetPaginationRowModel?.Invoke(this) ?? GetPaginatedRowModel(expandedRowModel);
         PrePaginationRowModel = expandedRowModel;
 
-        RowModel = Options.GetPaginationRowModel?.Invoke(this) ?? GetPaginatedRowModel(expandedRowModel);
+        RowModel = paginatedRowModel;
 
         UpdateRowMap();
     }
@@ -323,7 +324,7 @@ public class Table<TData> : ITable<TData>
         return leafIndexes.Min();
     }
 
-    public void SetState(TableState<TData> state)
+    public void SetState(TableState<TData> state, bool updateRowModel = true)
     {
         var oldState = _state;
         _state = state;
@@ -344,12 +345,15 @@ public class Table<TData> : ITable<TData>
             UpdateHeaderGroups();
         }
 
-        UpdateRowModel();
+        if (updateRowModel)
+        {
+            UpdateRowModel();
+        }
     }
 
-    public void SetState(Updater<TableState<TData>> updater)
+    public void SetState(Updater<TableState<TData>> updater, bool updateRowModel = true)
     {
-        SetState(updater(_state));
+        SetState(updater(_state), updateRowModel);
     }
 
     public Column<TData>? GetColumn(string columnId)

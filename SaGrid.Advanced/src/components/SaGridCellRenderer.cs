@@ -91,6 +91,10 @@ internal sealed class ReactiveCellComponent<TData> : Component
         _gridSignalGetter = gridSignalGetter;
         _selectionSignalGetter = selectionSignalGetter;
         _renderer = renderer;
+
+        // Activate lifecycle now that required state is assigned.
+        OnCreatedCore();
+        Initialize();
     }
 
     protected override object Build()

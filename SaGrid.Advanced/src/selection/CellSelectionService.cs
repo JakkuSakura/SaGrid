@@ -28,7 +28,7 @@ public class CellSelectionService
         grid.SetState(state => state with
         {
             CellSelection = new CellSelectionState(newSelectedCells, cellPosition, null)
-        });
+        }, updateRowModel: false);
 
         grid.NotifyUIUpdate();
     }
@@ -69,7 +69,7 @@ public class CellSelectionService
         grid.SetState(state => state with
         {
             CellSelection = new CellSelectionState(selectedCells, startPos, range)
-        });
+        }, updateRowModel: false);
 
         grid.NotifyUIUpdate();
     }
@@ -79,7 +79,7 @@ public class CellSelectionService
         grid.SetState(state => state with
         {
             CellSelection = new CellSelectionState()
-        });
+        }, updateRowModel: false);
 
         grid.NotifyUIUpdate();
     }

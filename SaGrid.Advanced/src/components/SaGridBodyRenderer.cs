@@ -56,6 +56,8 @@ internal class SaGridBodyRenderer<TData>
         private readonly ScrollViewer _scrollViewer;
         private readonly Canvas _canvas;
         private readonly IReadOnlyList<Row<TData>> _initialRows;
+        private bool _hasRealRows;
+        private int _lastKnownRowCount = -1;
 
         public VirtualizedRowsControl(
             SaGrid<TData> grid,
@@ -111,22 +113,29 @@ internal class SaGridBodyRenderer<TData>
 
         private void UpdateViewport(bool force = false)
         {
-            var totalRows = Math.Max(0, _grid.GetApproximateRowCount());
+            var rowCount = _grid.GetApproximateRowCount();
+            var totalRows = Math.Max(0, rowCount);
 
-            if (!force && totalRows == 0)
-            {
-                return;
-            }
-
-            if (totalRows == 0 && _initialRows.Count > 0)
+            if (totalRows == 0 && !_hasRealRows && _initialRows.Count > 0)
             {
                 totalRows = _initialRows.Count;
             }
 
-            var viewport = _scrollViewer.Viewport;
-            if (!force && (viewport.Height <= 0 || double.IsNaN(viewport.Height)))
+            if (totalRows != _lastKnownRowCount)
             {
-                return;
+                force = true;
+                _lastKnownRowCount = totalRows;
+            }
+
+            var viewport = _scrollViewer.Viewport;
+            var viewportHeight = viewport.Height;
+            if (double.IsNaN(viewportHeight) || viewportHeight <= 0)
+            {
+                viewportHeight = _scrollViewer.Bounds.Height;
+            }
+            if (double.IsNaN(viewportHeight) || viewportHeight <= 0)
+            {
+                viewportHeight = RowHeight * 20; // sensible default when layout hasn't measured yet
             }
 
             if (totalRows == 0)
@@ -136,14 +145,26 @@ internal class SaGridBodyRenderer<TData>
                 return;
             }
 
+            if (rowCount > 0)
+            {
+                _hasRealRows = true;
+            }
+
             _canvas.Height = totalRows * RowHeight;
 
             var verticalOffset = _scrollViewer.Offset.Y;
             var startIndex = Math.Max(0, (int)(verticalOffset / RowHeight) - Overscan);
-            var maxVisible = viewport.Height > 0
-                ? (int)Math.Ceiling(viewport.Height / RowHeight) + (Overscan * 2)
-                : totalRows;
+            var maxVisible = (int)Math.Ceiling(viewportHeight / RowHeight) + (Overscan * 2);
+            if (maxVisible <= 0)
+            {
+                maxVisible = Overscan * 2 + _grid.GetPreferredFetchSize();
+            }
             var endIndex = Math.Min(totalRows, startIndex + Math.Max(maxVisible, 0));
+
+            if (endIndex <= startIndex)
+            {
+                endIndex = Math.Min(totalRows, startIndex + _grid.GetPreferredFetchSize());
+            }
 
             _canvas.Children.Clear();
 
@@ -167,7 +188,7 @@ internal class SaGridBodyRenderer<TData>
 
         private Row<TData>? GetFallbackRow(int index)
         {
-            if (index >= 0 && index < _initialRows.Count)
+            if (!_hasRealRows && index >= 0 && index < _initialRows.Count)
             {
                 return _initialRows[index];
             }

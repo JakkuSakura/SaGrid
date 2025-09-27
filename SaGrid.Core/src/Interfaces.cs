@@ -16,8 +16,8 @@ public interface ITable<TData>
     RowModel<TData> PreExpandedRowModel { get; }
     RowModel<TData> PrePaginationRowModel { get; }
     
-    void SetState(TableState<TData> state);
-    void SetState(Updater<TableState<TData>> updater);
+    void SetState(TableState<TData> state, bool updateRowModel = true);
+    void SetState(Updater<TableState<TData>> updater, bool updateRowModel = true);
     Column<TData>? GetColumn(string columnId);
     Row<TData>? GetRow(string rowId);
     IReadOnlyList<Row<TData>> GetSelectedRowModel();
