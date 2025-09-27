@@ -1,7 +1,6 @@
-using System;
-using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Examples.Examples;
@@ -42,26 +41,35 @@ public class MainWindow : Window
 
     private Control BuildLayout()
     {
-        var container = new StackPanel
+        var layout = new Grid
         {
-            Orientation = Orientation.Vertical,
-            Spacing = 12,
-            Margin = new Thickness(20)
+            Margin = new Thickness(20),
+            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*"),
+            RowSpacing = 12
         };
 
-        container.Children.Add(new TextBlock
+        var title = new TextBlock
         {
             Text = "SaGrid.Advanced Example Gallery",
             FontSize = 22,
             FontWeight = FontWeight.Bold
-        });
+        };
+        layout.Children.Add(title);
 
-        container.Children.Add(new TextBlock
+        var subtitle = new TextBlock
         {
             Text = "Select an example scenario to load the corresponding grid configuration.",
             FontSize = 14,
             Foreground = Brushes.Gray
-        });
+        };
+        Grid.SetRow(subtitle, 1);
+        layout.Children.Add(subtitle);
+
+        var selectorPanel = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            Spacing = 6
+        };
 
         _exampleSelector = new ComboBox
         {
@@ -70,17 +78,22 @@ public class MainWindow : Window
             MinWidth = 260
         };
         _exampleSelector.SelectionChanged += OnExampleSelected;
-        container.Children.Add(_exampleSelector);
+        selectorPanel.Children.Add(_exampleSelector);
 
         _exampleDescription = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 8)
+            Margin = new Thickness(0, 4, 0, 0)
         };
-        container.Children.Add(_exampleDescription);
+        selectorPanel.Children.Add(_exampleDescription);
+
+        Grid.SetRow(selectorPanel, 2);
+        layout.Children.Add(selectorPanel);
 
         _exampleHost = new ContentControl
         {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
             Content = new TextBlock
             {
                 Text = "Choose an example above to see it rendered here.",
@@ -90,16 +103,26 @@ public class MainWindow : Window
             }
         };
 
-        container.Children.Add(new Border
+        var hostScrollViewer = new ScrollViewer
+        {
+            Content = _exampleHost,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
+
+        var hostBorder = new Border
         {
             BorderBrush = Brushes.LightGray,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(10),
-            Child = _exampleHost
-        });
+            Child = hostScrollViewer
+        };
 
-        return new ScrollViewer { Content = container };
+        Grid.SetRow(hostBorder, 3);
+        layout.Children.Add(hostBorder);
+
+        return layout;
     }
 
     private void OnExampleSelected(object? sender, SelectionChangedEventArgs e)
