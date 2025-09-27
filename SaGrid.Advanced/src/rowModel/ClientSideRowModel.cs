@@ -109,6 +109,7 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
                 ExecuteGroupStage();
                 ExecuteAggregateStage();
                 ExecuteMapStage();
+                UpdateDisplayIndices();
                 break;
             case ClientSideRowModelStage.Filter:
                 ExecuteFilterStage();
@@ -116,22 +117,27 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
                 ExecuteGroupStage();
                 ExecuteAggregateStage();
                 ExecuteMapStage();
+                UpdateDisplayIndices();
                 break;
             case ClientSideRowModelStage.Sort:
                 ExecuteSortStage();
                 ExecuteGroupStage();
                 ExecuteAggregateStage();
                 ExecuteMapStage();
+                UpdateDisplayIndices();
                 break;
             case ClientSideRowModelStage.Map:
                 ExecuteMapStage();
+                UpdateDisplayIndices();
                 break;
             case ClientSideRowModelStage.Group:
                 ExecuteGroupStage();
                 ExecuteAggregateStage();
+                UpdateDisplayIndices();
                 break;
             case ClientSideRowModelStage.Aggregate:
                 ExecuteAggregateStage();
+                UpdateDisplayIndices();
                 break;
             case ClientSideRowModelStage.Nothing:
                 // Do nothing
@@ -264,6 +270,19 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
     {
         var currentModel = _table.RowModel;
         _finalRows = currentModel.Rows.ToList();
+    }
+
+    private void UpdateDisplayIndices()
+    {
+        for (int i = 0; i < _finalRows.Count; i++)
+        {
+            _finalRows[i].SetDisplayIndex(i);
+        }
+
+        for (int i = 0; i < _rootRows.Count; i++)
+        {
+            _rootRows[i].SetDisplayIndex(i);
+        }
     }
 
     private void ExecuteGroupStage()
