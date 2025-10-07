@@ -7,6 +7,7 @@ using SaGrid.Core;
 using Tests.TestData;
 using Xunit;
 using FluentAssertions;
+using SaGrid.Advanced;
 
 namespace Tests.Features;
 

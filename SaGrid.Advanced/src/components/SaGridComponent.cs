@@ -16,15 +16,16 @@ using System.Linq;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using SaGrid.SolidAvalonia;
+using SaGrid.Core.Models;
 
 using GridControl = Avalonia.Controls.Grid;
 
 namespace SaGrid;
 
-public class SaGridComponent<TData> : Component
+public class SaGridComponent<TData> : SolidTable<TData>
 {
     private readonly SaGrid<TData> _saGrid;
-    private (Func<SaGrid<TData>>, Action<SaGrid<TData>>)? _gridSignal;
     private (Func<int>, Action<int>)? _selectionSignal;
     private Grid? _rootGrid;
     private Border? _rootBorder;
@@ -37,6 +38,8 @@ public class SaGridComponent<TData> : Component
     private string _filterVersion = string.Empty;
     private string _bodyStructureVersion = string.Empty;
     private ISelectionAwareRowsControl? _virtualizedRowsControl;
+    private bool _callbacksConnected;
+    private int _selectionCounter;
 
     // Renderers
     private readonly SaGridHeaderRenderer<TData> _headerRenderer;
@@ -45,9 +48,14 @@ public class SaGridComponent<TData> : Component
     private DragDropManager<TData>? _dragDropManager;
     private DragValidationService<TData>? _dragValidationService;
 
-    public SaGrid<TData> Grid => _gridSignal?.Item1() ?? throw new InvalidOperationException("Grid not initialized. Call Build() first.");
+    private (Func<Table<TData>> Getter, Action<Table<TData>> Setter) TableSignalValue =>
+        TableSignal ?? throw new InvalidOperationException("Table signal not initialized.");
 
-    public SaGridComponent(SaGrid<TData> saGrid) : base(true)
+    private SaGrid<TData> CurrentGrid => (SaGrid<TData>)TableSignalValue.Getter();
+
+    public SaGrid<TData> Grid => CurrentGrid;
+
+    public SaGridComponent(SaGrid<TData> saGrid) : base(saGrid.Options, saGrid)
     {
         _saGrid = saGrid;
         
@@ -60,41 +68,23 @@ public class SaGridComponent<TData> : Component
             });
         _bodyRenderer = new SaGridBodyRenderer<TData>();
         _footerRenderer = new SaGridFooterRenderer<TData>();
-        
-        OnCreatedCore(); // 推送 reactive owner
-        Initialize(); // 触发 Build()
+    }
+    
+    protected override void OnTableInitialized(Table<TData> table)
+    {
+        base.OnTableInitialized(table);
+        if (table is not SaGrid<TData>)
+        {
+            throw new InvalidOperationException("SaGridComponent requires SaGrid table instance.");
+        }
+
+        _callbacksConnected = false;
     }
 
-    protected override object Build()
+    protected override Control BuildContent(Table<TData> currentTable)
     {
-        // Initialize reactive signals and wire SaGrid.Advanced to trigger them
-        if (_gridSignal == null)
-        {
-            _gridSignal = CreateSignal(_saGrid);
-            _selectionSignal = CreateSignal(0);
-
-            var (gridGetter, gridSetter) = _gridSignal.Value;
-            var (selectionGetter, selectionSetter) = _selectionSignal.Value;
-            var selectionCounter = 0;
-
-            _saGrid.SetUIUpdateCallbacks(
-                () =>
-                {
-                    _themeTick++;
-                    gridSetter?.Invoke(_saGrid);
-                    selectionSetter?.Invoke(++selectionCounter);
-                    HandleHeaderStateChanges();
-                },
-                delta =>
-                {
-                    if (delta != null)
-                    {
-                        _virtualizedRowsControl?.ApplySelectionDelta(delta);
-                    }
-
-                    selectionSetter?.Invoke(++selectionCounter);
-                });
-        }
+        EnsureSelectionSignal();
+        EnsureCallbacks();
 
         // Build the root container once to avoid reparenting and keep header TextBoxes stable
         if (_rootGrid == null)
@@ -148,6 +138,53 @@ public class SaGridComponent<TData> : Component
         return _rootBorder!;
     }
 
+    protected override Control WrapContent(Table<TData> table, Control content)
+    {
+        // Content already wrapped in _rootBorder
+        return content;
+    }
+
+    private (Func<int> Getter, Action<int> Setter) EnsureSelectionSignal()
+    {
+        if (_selectionSignal == null)
+        {
+            _selectionSignal = CreateSignal(0);
+        }
+
+        return _selectionSignal.Value;
+    }
+
+    private void EnsureCallbacks()
+    {
+        if (_callbacksConnected || TableSignal == null || _selectionSignal == null)
+        {
+            return;
+        }
+
+        var tableSignal = TableSignalValue;
+        var (_, selectionSetter) = _selectionSignal.Value;
+
+        _saGrid.SetUIUpdateCallbacks(
+            () =>
+            {
+                _themeTick++;
+                tableSignal.Setter(_saGrid);
+                selectionSetter(++_selectionCounter);
+                HandleHeaderStateChanges();
+            },
+            delta =>
+            {
+                if (delta != null)
+                {
+                    _virtualizedRowsControl?.ApplySelectionDelta(delta);
+                }
+
+                selectionSetter(++_selectionCounter);
+            });
+
+        _callbacksConnected = true;
+    }
+
     private void EnsureDragDropInfrastructure()
     {
         if (_rootGrid == null)
@@ -155,12 +192,14 @@ public class SaGridComponent<TData> : Component
             return;
         }
 
-        _dragValidationService ??= new DragValidationService<TData>(_saGrid);
-        _dragDropManager ??= new DragDropManager<TData>(_saGrid.GetEventService(), _rootGrid, _dragValidationService);
+        var grid = CurrentGrid;
+
+        _dragValidationService ??= new DragValidationService<TData>(grid);
+        _dragDropManager ??= new DragDropManager<TData>(grid.GetEventService(), _rootGrid, _dragValidationService);
 
         if (_dragDropManager != null)
         {
-            _headerRenderer.EnableInteractivity(_dragDropManager, _saGrid.GetColumnInteractiveService());
+            _headerRenderer.EnableInteractivity(_dragDropManager, grid.GetColumnInteractiveService());
         }
     }
 
@@ -190,20 +229,22 @@ public class SaGridComponent<TData> : Component
 
     private string ComputeHeaderStructureVersion()
     {
-        var columnsSignature = string.Join("|", _saGrid.VisibleLeafColumns.Select(c => $"{c.Id}:{c.Size}").ToArray());
-        var sortingSignature = _saGrid.State.Sorting != null
-            ? string.Join("|", _saGrid.State.Sorting.Columns.Select(c => $"{c.Id}:{c.Direction}").ToArray())
+        var grid = CurrentGrid;
+        var columnsSignature = string.Join("|", grid.VisibleLeafColumns.Select(c => $"{c.Id}:{c.Size}").ToArray());
+        var sortingSignature = grid.State.Sorting != null
+            ? string.Join("|", grid.State.Sorting.Columns.Select(c => $"{c.Id}:{c.Direction}").ToArray())
             : string.Empty;
-        var groupingSignature = string.Join("|", _saGrid.GetGroupedColumnIds());
-        var multiSort = _saGrid.IsMultiSortEnabled() ? "1" : "0";
+        var groupingSignature = string.Join("|", grid.GetGroupedColumnIds());
+        var multiSort = grid.IsMultiSortEnabled() ? "1" : "0";
         return $"cols={columnsSignature};sort={sortingSignature};group={groupingSignature};multi={multiSort}";
     }
 
     private string ComputeBodyStructureVersion()
     {
+        var grid = CurrentGrid;
         var columnSignature = string.Join(
             "|",
-            _saGrid.VisibleLeafColumns
+            grid.VisibleLeafColumns
                 .Select(c => $"{c.Id}:{c.Size.ToString(CultureInfo.InvariantCulture)}:{c.PinnedPosition ?? "-"}")
                 .ToArray());
 
@@ -212,7 +253,7 @@ public class SaGridComponent<TData> : Component
 
     private string ComputeFilterVersion()
     {
-        var filters = _saGrid.State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
+        var filters = CurrentGrid.State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
         return string.Join("|", filters.OrderBy(f => f.Id).Select(f => $"{f.Id}:{f.Value}").ToArray());
     }
 
@@ -225,7 +266,11 @@ public class SaGridComponent<TData> : Component
 
         EnsureDragDropInfrastructure();
 
-        var header = _headerRenderer.CreateHeader(_saGrid, null, null);
+        var current = CurrentGrid;
+        var header = _headerRenderer.CreateHeader(
+            current,
+            () => CurrentGrid,
+            _selectionSignal?.Item1);
         if (header is Control hdrCtrl)
         {
             hdrCtrl.SetValue(Panel.ZIndexProperty, 1);
@@ -274,7 +319,7 @@ public class SaGridComponent<TData> : Component
 
     private void EnsureBodyControl(bool force = false)
     {
-        if (_gridSignal == null || _bodyHost == null)
+        if (TableSignal == null || _bodyHost == null)
         {
             return;
         }
@@ -286,14 +331,15 @@ public class SaGridComponent<TData> : Component
         }
 
         _bodyStructureVersion = bodyVersion;
-        var bodyControl = _bodyRenderer.CreateBody(Grid, () => Grid, _selectionSignal?.Item1);
+        var current = CurrentGrid;
+        var bodyControl = _bodyRenderer.CreateBody(current, () => CurrentGrid, _selectionSignal?.Item1);
         _virtualizedRowsControl = bodyControl as ISelectionAwareRowsControl;
         _bodyHost.Content = bodyControl;
     }
 
     private string GetFilterText(string columnId)
     {
-        var filters = _saGrid.State.ColumnFilters?.Filters;
+        var filters = CurrentGrid.State.ColumnFilters?.Filters;
         var value = filters?.FirstOrDefault(f => f.Id == columnId)?.Value;
         return value?.ToString() ?? string.Empty;
     }

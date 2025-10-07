@@ -1,27 +1,23 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
-using SaGrid.Core;
 using SaGrid.Advanced.Context;
 using SaGrid.Advanced.Events;
+using SaGrid.Advanced.Interactive;
 using SaGrid.Advanced.Interfaces;
 using SaGrid.Advanced.Modules.Analytics;
-using SaGrid.Advanced.Modules.SideBar;
-using SaGrid.Advanced.Modules.StatusBar;
+using SaGrid.Advanced.Modules.Editing;
 using SaGrid.Advanced.Modules.Export;
+using SaGrid.Advanced.Modules.Filters;
+using SaGrid.Advanced.Modules.SideBar;
+using SaGrid.Advanced.Modules.Sorting;
+using SaGrid.Advanced.Modules.StatusBar;
 using SaGrid.Advanced.RowModel;
 using SaGrid.Advanced.Selection;
-using SaGrid.Advanced.Modules.Sorting;
-using SaGrid.Advanced.Interactive;
-using SaGrid.Advanced.Modules.Filters;
-using SaGrid.Advanced.Modules.Editing;
+using SaGrid.Core;
+using SaGrid.Core.Models;
 
-namespace SaGrid;
+namespace SaGrid.Advanced;
 
 public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
 {

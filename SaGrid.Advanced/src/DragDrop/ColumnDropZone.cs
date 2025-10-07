@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using SaGrid.Advanced.Interactive;
 using SaGrid.Advanced.Interfaces;
 using SaGrid.Core;
+using SaGrid.Core.Models;
 
 namespace SaGrid.Advanced.DragDrop;
 

@@ -7,6 +7,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Declarative;
 using Avalonia.Media;
+using SaGrid.Advanced;
 using SaGrid.Advanced.DragDrop;
 using SaGrid.Advanced.Interactive;
 using SaGrid.Core;

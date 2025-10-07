@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
+using SaGrid.Advanced;
 using SaGrid.Advanced.Interfaces;
 using SaGrid.Core;
 

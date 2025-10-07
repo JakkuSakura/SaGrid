@@ -1,4 +1,5 @@
 using SaGrid.Core;
+using SaGrid.Core.Models;
 
 namespace SaGrid.Advanced.DragDrop;
 

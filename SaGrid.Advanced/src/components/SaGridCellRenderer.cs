@@ -12,6 +12,7 @@ using static SolidAvalonia.Solid;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.VisualTree;
+using SaGrid.Advanced;
 
 namespace SaGrid;
 

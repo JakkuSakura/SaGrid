@@ -9,6 +9,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Examples.Models;
 using SaGrid;
+using SaGrid.Advanced;
 using SaGrid.Advanced.Interfaces;
 using SaGrid.Advanced.Modules.SideBar;
 using SaGrid.Advanced.Modules.StatusBar;

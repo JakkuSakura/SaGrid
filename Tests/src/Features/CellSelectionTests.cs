@@ -1,3 +1,4 @@
+using SaGrid.Advanced;
 using SaGrid.Core;
 using Tests.TestData;
 using Tests.Contracts;

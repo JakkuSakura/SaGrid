@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Markup.Declarative;
 using SaGrid.Avalonia;
+using SaGrid.Core.Models;
 using SolidAvalonia;
 using static SolidAvalonia.Solid;
 
@@ -15,7 +16,7 @@ public class SolidTable<TData> : Component
     private readonly TableFooterRenderer<TData> _footerRenderer = new();
 
     private Table<TData>? _table;
-    private Table<TData>? _externalTable;
+    private readonly Table<TData>? _externalTable;
     private (Func<Table<TData>>, Action<Table<TData>>)? _tableSignal;
 
     public SolidTable(TableOptions<TData> options, Table<TData>? externalTable = null) : base(true)
@@ -28,6 +29,10 @@ public class SolidTable<TData> : Component
 
     public Table<TData> Table => _table ?? throw new InvalidOperationException("Table not initialized");
 
+    protected TableOptions<TData> Options => _options;
+
+    protected (Func<Table<TData>> Getter, Action<Table<TData>> Setter)? TableSignal => _tableSignal;
+
     protected override object Build()
     {
         EnsureTableAndSignal();
@@ -35,19 +40,36 @@ public class SolidTable<TData> : Component
         return Reactive(() =>
         {
             var currentTable = _tableSignal!.Value.Item1();
-
-            var container = new StackPanel()
-                .Children(
-                    _headerRenderer.CreateHeader(currentTable),
-                    _bodyRenderer.CreateBody(currentTable),
-                    _footerRenderer.CreateFooter(currentTable)
-                );
-
-            return new Border()
-                .BorderThickness(1)
-                .BorderBrush(Brushes.Gray)
-                .Child(container);
+            var content = BuildContent(currentTable);
+            return WrapContent(currentTable, content);
         });
+    }
+
+    protected virtual Control BuildContent(Table<TData> table)
+    {
+        return new StackPanel()
+            .Children(
+                CreateHeader(table),
+                CreateBody(table),
+                CreateFooter(table));
+    }
+
+    protected virtual Control WrapContent(Table<TData> table, Control content)
+    {
+        return new Border()
+            .BorderThickness(1)
+            .BorderBrush(Brushes.Gray)
+            .Child(content);
+    }
+
+    protected virtual Control CreateHeader(Table<TData> table) => _headerRenderer.CreateHeader(table);
+
+    protected virtual Control CreateBody(Table<TData> table) => _bodyRenderer.CreateBody(table);
+
+    protected virtual Control CreateFooter(Table<TData> table) => _footerRenderer.CreateFooter(table);
+
+    protected virtual void OnTableInitialized(Table<TData> table)
+    {
     }
 
     private void EnsureTableAndSignal()
@@ -66,6 +88,7 @@ public class SolidTable<TData> : Component
             _table = CreateTable(_options);
         }
 
+        OnTableInitialized(_table);
         _tableSignal = CreateSignal(_table);
     }
 

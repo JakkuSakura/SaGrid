@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using SaGrid.Core.Models;
 
 namespace SaGrid.Avalonia;
 

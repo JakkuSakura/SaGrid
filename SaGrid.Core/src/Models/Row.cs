@@ -1,3 +1,5 @@
+using SaGrid.Core.Models;
+
 namespace SaGrid.Core;
 
 public class Row<TData> : IRow<TData>

@@ -1,8 +1,4 @@
-using System.Collections.Concurrent;
-using System.Linq;
-using System.Reflection;
-
-namespace SaGrid.Core;
+namespace SaGrid.Core.Models;
 
 public class Table<TData> : ITable<TData>
 {

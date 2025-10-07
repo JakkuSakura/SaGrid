@@ -4,6 +4,7 @@ using Avalonia.Media;
 using Avalonia.Markup.Declarative;
 using SaGrid.Core;
 using Avalonia;
+using SaGrid.Advanced;
 using SolidAvalonia;
 using static SolidAvalonia.Solid;
 

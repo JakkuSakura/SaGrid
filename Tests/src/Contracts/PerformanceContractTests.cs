@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using SaGrid.Core.Models;
 using Tests.TestData;
 
 namespace Tests.Contracts;

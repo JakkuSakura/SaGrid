@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SaGrid.Core;
 using SaGrid.Advanced.Events;
+using SaGrid.Core.Models;
 
 namespace SaGrid.Advanced.Interactive;
 

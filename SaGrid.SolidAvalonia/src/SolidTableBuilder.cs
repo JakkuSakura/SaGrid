@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Markup.Declarative;
 using SaGrid.Avalonia;
 using SaGrid.Core;
+using SaGrid.Core.Models;
 using static SolidAvalonia.Solid;
 
 namespace SaGrid.SolidAvalonia;

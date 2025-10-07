@@ -1,3 +1,4 @@
+using SaGrid.Core.Models;
 using Tests.TestData;
 
 namespace Tests.Contracts;

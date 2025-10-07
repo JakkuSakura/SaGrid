@@ -1,6 +1,7 @@
 using System.Linq;
 using FluentAssertions;
 using SaGrid;
+using SaGrid.Advanced;
 using SaGrid.Core;
 using Tests.Contracts;
 using Tests.TestData;
