@@ -259,11 +259,8 @@ internal class SaGridHeaderRenderer<TData>
             .VerticalAlignment(VerticalAlignment.Stretch);
 
         var headerGrid = new Grid();
-        headerGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
-        headerGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(20)));
 
         var mainButton = CreateMainHeaderButton(host, table, column, header);
-        Grid.SetColumn(mainButton, 0);
         headerGrid.Children.Add(mainButton);
 
         if (_dragDropManager != null && _columnService != null)
@@ -273,7 +270,8 @@ internal class SaGridHeaderRenderer<TData>
             _activeDragSources.Add(dragSource);
 
             var resizeHandle = CreateResizeHandle(table, column, header);
-            Grid.SetColumn(resizeHandle, 1);
+            resizeHandle.HorizontalAlignment = HorizontalAlignment.Right;
+            resizeHandle.VerticalAlignment = VerticalAlignment.Stretch;
             headerGrid.Children.Add(resizeHandle);
         }
 
@@ -306,7 +304,7 @@ internal class SaGridHeaderRenderer<TData>
     private Control CreateResizeHandle(Table<TData> table, Column<TData> column, IHeader<TData> header)
     {
         var resizeHandle = new Border()
-            .Width(4)
+            .Width(6)
             .Background(Brushes.Transparent)
             .Cursor(new Cursor(StandardCursorType.SizeWestEast))
             .VerticalAlignment(VerticalAlignment.Stretch);
@@ -588,24 +586,14 @@ internal class SaGridHeaderRenderer<TData>
             sortSuffix = $" {arrow}{index}";
         }
 
-        var container = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto"),
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Stretch
-        };
-
-        var textBlock = new TextBlock
+        return new TextBlock
         {
             Text = title + sortSuffix,
             VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(8, 0, 0, 0)
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            TextAlignment = TextAlignment.Center,
+            Margin = new Thickness(0)
         };
-
-        container.Children.Add(textBlock);
-
-        return container;
     }
 
     private void CleanupInteractivity()
