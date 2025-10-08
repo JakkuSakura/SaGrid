@@ -1,6 +1,10 @@
+using System.Collections.Generic;
+using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Media;
 using SaGrid.Core.Models;
 
 namespace SaGrid.Avalonia;
@@ -11,67 +15,53 @@ public class TableHeaderRenderer<TData>
     private const double FilterHeight = 35;
     private const double ResizeHandleWidth = 8d;
 
+    private TableColumnLayoutManager<TData>? _currentLayoutManager;
+
     public Control CreateHeader(Table<TData> table)
     {
+        var layoutManager = new TableColumnLayoutManager<TData>(table);
+        return CreateHeader(table, layoutManager);
+    }
+
+    public Control CreateHeader(Table<TData> table, TableColumnLayoutManager<TData> layoutManager)
+    {
+        _currentLayoutManager = layoutManager;
+
         var container = new StackPanel { Orientation = Orientation.Vertical };
 
         foreach (var headerGroup in table.HeaderGroups)
         {
-            var rowPanel = new StackPanel { Orientation = Orientation.Horizontal };
+            var rowPanel = layoutManager.CreatePanel();
+            rowPanel.Height = HeaderHeight;
 
             foreach (var header in headerGroup.Headers)
             {
                 var column = (Column<TData>)header.Column;
-                var border = new Border
+                var headerCell = CreateHeaderCell(table, column, header);
+
+                if (header.SubHeaders.Count > 0)
                 {
-                    BorderThickness = new Thickness(0, 0, 1, 1),
-                    BorderBrush = Brushes.LightGray,
-                    Background = Brushes.LightBlue,
-                    Width = header.Size,
-                    Height = HeaderHeight,
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    VerticalAlignment = VerticalAlignment.Stretch
-                };
+                    var spanIds = column.LeafColumns
+                        .OfType<Column<TData>>()
+                        .Where(c => c.IsVisible)
+                        .Select(c => c.Id)
+                        .ToArray();
 
-                var hasResizer = ShouldRenderResizer(column);
-
-                var headerGrid = new Grid();
-                headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
-
-                if (hasResizer)
-                {
-                    headerGrid.ColumnDefinitions.Add(new ColumnDefinition
+                    if (spanIds.Length > 0)
                     {
-                        Width = new GridLength(ResizeHandleWidth, GridUnitType.Pixel)
-                    });
+                        ColumnLayoutPanel.SetColumnSpan(headerCell, spanIds);
+                    }
+                    else
+                    {
+                        ColumnLayoutPanel.SetColumnId(headerCell, column.Id);
+                    }
+                }
+                else
+                {
+                    ColumnLayoutPanel.SetColumnId(headerCell, column.Id);
                 }
 
-                var contentHost = new Border
-                {
-                    Background = Brushes.Transparent,
-                    Padding = new Thickness(8, 0, 8, 0),
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    VerticalAlignment = VerticalAlignment.Stretch
-                };
-
-                var content = CreateHeaderContent(column, header, out var sortIndicator);
-                contentHost.Child = content;
-
-                Grid.SetColumn(contentHost, 0);
-                headerGrid.Children.Add(contentHost);
-
-                if (hasResizer)
-                {
-                    var resizer = CreateResizeThumb(column, border);
-                    Grid.SetColumn(resizer, 1);
-                    headerGrid.Children.Add(resizer);
-                }
-
-                border.Child = headerGrid;
-
-                AttachSortingInteraction(contentHost, table, column, sortIndicator);
-
-                rowPanel.Children.Add(border);
+                rowPanel.Children.Add(headerCell);
             }
 
             container.Children.Add(rowPanel);
@@ -79,10 +69,63 @@ public class TableHeaderRenderer<TData>
 
         if (table.Options.EnableColumnFilters)
         {
-            container.Children.Add(CreateFilterRow(table));
+            container.Children.Add(CreateFilterRow(table, layoutManager));
         }
 
         return container;
+    }
+
+    private Control CreateHeaderCell(Table<TData> table, Column<TData> column, IHeader<TData> header)
+    {
+        var border = new Border
+        {
+            BorderThickness = new Thickness(0, 0, 1, 1),
+            BorderBrush = Brushes.LightGray,
+            Background = Brushes.LightBlue,
+            Padding = new Thickness(0),
+            Height = HeaderHeight,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch
+        };
+
+        var headerGrid = new Grid();
+        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
+
+        var hasResizer = ShouldRenderResizer(column);
+        if (hasResizer)
+        {
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition
+            {
+                Width = new GridLength(ResizeHandleWidth, GridUnitType.Pixel)
+            });
+        }
+
+        var contentHost = new Border
+        {
+            Background = Brushes.Transparent,
+            Padding = new Thickness(8, 0, 8, 0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch
+        };
+
+        var content = CreateHeaderContent(column, header, out var sortIndicator);
+        contentHost.Child = content;
+
+        Grid.SetColumn(contentHost, 0);
+        headerGrid.Children.Add(contentHost);
+
+        if (hasResizer)
+        {
+            var resizer = CreateResizeThumb(column);
+            Grid.SetColumn(resizer, 1);
+            headerGrid.Children.Add(resizer);
+        }
+
+        border.Child = headerGrid;
+
+        AttachSortingInteraction(contentHost, table, column, sortIndicator);
+
+        return border;
     }
 
     private Control CreateHeaderContent(
@@ -174,7 +217,7 @@ public class TableHeaderRenderer<TData>
         return !column.Columns.Any() && column.CanResize;
     }
 
-    private Control CreateResizeThumb(Column<TData> column, Border headerBorder)
+    private Control CreateResizeThumb(Column<TData> column)
     {
         var thumb = new Thumb
         {
@@ -192,12 +235,7 @@ public class TableHeaderRenderer<TData>
                 return;
             }
 
-            var currentWidth = headerBorder.Width;
-            if (double.IsNaN(currentWidth) || double.IsInfinity(currentWidth))
-            {
-                currentWidth = column.Size;
-            }
-
+            var currentWidth = column.Size;
             var minWidth = (double)(column.ColumnDef.MinSize ?? 40);
             var maxWidth = column.ColumnDef.MaxSize;
 
@@ -208,15 +246,15 @@ public class TableHeaderRenderer<TData>
                 updatedWidth = Math.Min(updatedWidth, maxWidth.Value);
             }
 
-            headerBorder.Width = updatedWidth;
             column.SetSize(updatedWidth);
+            _currentLayoutManager?.Refresh();
             e.Handled = true;
         };
 
         thumb.DoubleTapped += (_, e) =>
         {
             column.ResetSize();
-            headerBorder.Width = column.Size;
+            _currentLayoutManager?.Refresh();
             e.Handled = true;
         };
 
@@ -285,9 +323,10 @@ public class TableHeaderRenderer<TData>
         target.PointerExited += (_, __) => pressed = false;
     }
 
-    private Control CreateFilterRow(Table<TData> table)
+    private Control CreateFilterRow(Table<TData> table, TableColumnLayoutManager<TData> layoutManager)
     {
-        var rowPanel = new StackPanel { Orientation = Orientation.Horizontal };
+        var rowPanel = layoutManager.CreatePanel();
+        rowPanel.Height = FilterHeight;
 
         foreach (var column in table.VisibleLeafColumns)
         {
@@ -296,8 +335,6 @@ public class TableHeaderRenderer<TData>
                 BorderThickness = new Thickness(0, 0, 1, 1),
                 BorderBrush = Brushes.LightGray,
                 Background = Brushes.White,
-                Width = column.Size,
-                Height = FilterHeight,
                 Padding = new Thickness(4)
             };
 
@@ -323,6 +360,7 @@ public class TableHeaderRenderer<TData>
             };
 
             border.Child = textBox;
+            ColumnLayoutPanel.SetColumnId(border, column.Id);
             rowPanel.Children.Add(border);
         }
 

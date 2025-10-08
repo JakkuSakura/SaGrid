@@ -7,6 +7,8 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Declarative;
 using Avalonia.Media;
+using Avalonia.Controls.Primitives;
+using SaGrid.Avalonia;
 using SaGrid.Advanced.Components;
 using SaGrid.Advanced.DragDrop;
 using SaGrid.Advanced.Interactive;
@@ -18,12 +20,16 @@ namespace SaGrid;
 
 internal class SaGridHeaderRenderer<TData>
 {
+    private const double HeaderHeight = 40;
+    private const double ResizeHandleWidth = 6;
+
     private readonly Action<TextBox>? _onFilterFocus;
     private readonly Action<string, TextBox>? _onFilterTextBoxCreated;
     private DragDropManager<TData>? _dragDropManager;
     private ColumnInteractiveService<TData>? _columnService;
     private readonly List<IDragSource> _activeDragSources = new();
     private readonly List<IDropZone> _activeDropZones = new();
+    private TableColumnLayoutManager<TData>? _layoutManager;
 
     private bool HasInteractivity => _dragDropManager != null && _columnService != null;
 
@@ -49,6 +55,7 @@ internal class SaGridHeaderRenderer<TData>
     public Control CreateHeader(
         ISaGridComponentHost<TData> host,
         Table<TData> table,
+        TableColumnLayoutManager<TData> layoutManager,
         Func<ISaGridComponentHost<TData>>? hostSignalGetter = null,
         Func<int>? selectionSignalGetter = null)
     {
@@ -56,6 +63,7 @@ internal class SaGridHeaderRenderer<TData>
         _ = selectionSignalGetter;
 
         CleanupInteractivity();
+        _layoutManager = layoutManager;
 
         var headerControls = new List<Control>();
 
@@ -70,15 +78,36 @@ internal class SaGridHeaderRenderer<TData>
 
         foreach (var headerGroup in table.HeaderGroups)
         {
-            var headerRow = new StackPanel
-            {
-                Orientation = Orientation.Horizontal
-            };
+            var headerRow = layoutManager.CreatePanel();
+            headerRow.Height = HeaderHeight;
 
             foreach (var header in headerGroup.Headers)
             {
                 var column = (Column<TData>)header.Column;
                 var headerCell = CreateHeaderCell(host, table, column, header);
+
+                if (header.SubHeaders.Count > 0)
+                {
+                    var spanIds = column.LeafColumns
+                        .OfType<Column<TData>>()
+                        .Where(c => c.IsVisible)
+                        .Select(c => c.Id)
+                        .ToArray();
+
+                    if (spanIds.Length > 0)
+                    {
+                        ColumnLayoutPanel.SetColumnSpan(headerCell, spanIds);
+                    }
+                    else
+                    {
+                        ColumnLayoutPanel.SetColumnId(headerCell, column.Id);
+                    }
+                }
+                else
+                {
+                    ColumnLayoutPanel.SetColumnId(headerCell, column.Id);
+                }
+
                 headerRow.Children.Add(headerCell);
             }
 
@@ -94,7 +123,7 @@ internal class SaGridHeaderRenderer<TData>
 
         if (table.Options.EnableColumnFilters)
         {
-            headerControls.Add(CreateFilterRow(host, table));
+            headerControls.Add(CreateFilterRow(host, table, layoutManager));
         }
 
         return new StackPanel()
@@ -269,7 +298,7 @@ internal class SaGridHeaderRenderer<TData>
             _dragDropManager.RegisterDragSource(dragSource);
             _activeDragSources.Add(dragSource);
 
-            var resizeHandle = CreateResizeHandle(table, column, header);
+            var resizeHandle = CreateResizeHandle(table, column, border);
             resizeHandle.HorizontalAlignment = HorizontalAlignment.Right;
             resizeHandle.VerticalAlignment = VerticalAlignment.Stretch;
             headerGrid.Children.Add(resizeHandle);
@@ -301,99 +330,102 @@ internal class SaGridHeaderRenderer<TData>
         return button;
     }
 
-    private Control CreateResizeHandle(Table<TData> table, Column<TData> column, IHeader<TData> header)
+    private Control CreateResizeHandle(Table<TData> table, Column<TData> column, Border headerBorder)
     {
-        var resizeHandle = new Border()
-            .Width(6)
-            .Background(Brushes.Transparent)
-            .Cursor(new Cursor(StandardCursorType.SizeWestEast))
-            .VerticalAlignment(VerticalAlignment.Stretch);
+        var thumb = new Thumb
+        {
+            Width = ResizeHandleWidth,
+            Background = Brushes.Transparent,
+            Cursor = new Cursor(StandardCursorType.SizeWestEast),
+            VerticalAlignment = VerticalAlignment.Stretch,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
 
-        double? dragStartX = null;
-        double startWidth = 0;
-        var isResizing = false;
+        double startWidth = column.Size;
+        double cumulativeDelta = 0;
+        double appliedDelta = 0;
+        bool isPairResize = false;
         Column<TData>? neighbourColumn = null;
 
-        resizeHandle.PointerEntered += (_, _) =>
+        thumb.PointerEntered += (_, _) =>
         {
-            resizeHandle.Background = new SolidColorBrush(Colors.Blue, 0.3);
+            thumb.Background = new SolidColorBrush(Colors.Blue, 0.2);
         };
 
-        resizeHandle.PointerExited += (_, _) =>
+        thumb.PointerExited += (_, _) =>
         {
-            resizeHandle.Background = Brushes.Transparent;
+            thumb.Background = Brushes.Transparent;
         };
 
-        resizeHandle.PointerPressed += (_, e) =>
+        thumb.PointerPressed += (_, e) =>
         {
-            var point = e.GetCurrentPoint(resizeHandle);
-            if (point.Properties.IsLeftButtonPressed)
+            if (e.GetCurrentPoint(thumb).Properties.IsLeftButtonPressed)
             {
-                dragStartX = point.Position.X;
-                startWidth = header.Size;
-                isResizing = true;
-                neighbourColumn = table.VisibleLeafColumns
-                    .SkipWhile(c => c.Id != column.Id)
-                    .Skip(1)
-                    .Cast<Column<TData>?>()
-                    .FirstOrDefault();
-                e.Pointer.Capture(resizeHandle);
-                e.Handled = true;
+                isPairResize = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
             }
         };
 
-        resizeHandle.PointerMoved += (_, e) =>
+        thumb.DragStarted += (_, _) =>
         {
-            if (isResizing && dragStartX.HasValue && ReferenceEquals(e.Pointer.Captured, resizeHandle))
-            {
-                var current = e.GetCurrentPoint(resizeHandle).Position.X;
-                var delta = current - dragStartX.Value;
-                if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && neighbourColumn != null)
-                {
-                    _columnService?.ResizeColumnPair(column.Id, neighbourColumn.Id, delta);
-                }
-                else
-                {
-                    var newWidth = startWidth + delta;
-                    _columnService?.SetColumnWidth(column.Id, newWidth);
-                }
-                e.Handled = true;
-            }
+            startWidth = column.Size;
+            cumulativeDelta = 0;
+            appliedDelta = 0;
+            neighbourColumn = table.VisibleLeafColumns
+                .SkipWhile(c => c.Id != column.Id)
+                .Skip(1)
+                .OfType<Column<TData>>()
+                .FirstOrDefault();
         };
 
-        void EndResize(IPointer pointer)
+        thumb.DragDelta += (_, e) =>
         {
-            if (isResizing)
-            {
-                isResizing = false;
-                dragStartX = null;
-                startWidth = 0;
-                if (ReferenceEquals(pointer.Captured, resizeHandle))
-                {
-                    pointer.Capture(null);
-                }
-            }
-        }
+            cumulativeDelta += e.Vector.X;
+            var deltaIncrement = cumulativeDelta - appliedDelta;
 
-        resizeHandle.PointerReleased += (_, e) =>
-        {
-            EndResize(e.Pointer);
+            if (isPairResize && neighbourColumn != null)
+            {
+                _columnService?.ResizeColumnPair(column.Id, neighbourColumn.Id, deltaIncrement);
+            }
+            else
+            {
+                var newWidth = Math.Max(40, startWidth + cumulativeDelta);
+                _columnService?.SetColumnWidth(column.Id, newWidth);
+            }
+
+            headerBorder.Width = column.Size;
+            appliedDelta = cumulativeDelta;
+            _layoutManager?.Refresh();
             e.Handled = true;
         };
 
-        resizeHandle.PointerCaptureLost += (_, _) =>
+        void ResetDrag()
         {
-            isResizing = false;
-            dragStartX = null;
-            startWidth = 0;
+            cumulativeDelta = 0;
+            appliedDelta = 0;
+            isPairResize = false;
+            neighbourColumn = null;
+            headerBorder.Width = column.Size;
+        }
+
+        thumb.DragCompleted += (_, _) =>
+        {
+            ResetDrag();
+            _layoutManager?.Refresh();
         };
 
-        resizeHandle.DoubleTapped += (_, _) =>
+        thumb.PointerCaptureLost += (_, _) =>
+        {
+            ResetDrag();
+        };
+
+        thumb.DoubleTapped += (_, _) =>
         {
             _columnService?.AutoSizeColumn(column.Id);
+            headerBorder.Width = column.Size;
+            _layoutManager?.Refresh();
         };
 
-        return resizeHandle;
+        return thumb;
     }
 
     private void SetupSortingBehavior(Button button, ISaGridComponentHost<TData> host, Table<TData> table, Column<TData> column)
@@ -471,29 +503,32 @@ internal class SaGridHeaderRenderer<TData>
         button.Click += (_, _) => ApplySorting(false);
     }
 
-    private Control CreateFilterRow(ISaGridComponentHost<TData> host, Table<TData> table)
+    private Control CreateFilterRow(
+        ISaGridComponentHost<TData> host,
+        Table<TData> table,
+        TableColumnLayoutManager<TData> layoutManager)
     {
-        var filterControls = table.VisibleLeafColumns.Select(column =>
+        var panel = layoutManager.CreatePanel();
+        panel.Height = 35;
+
+        foreach (var column in table.VisibleLeafColumns.Cast<Column<TData>>())
         {
             var textBox = CreateFilterTextBox(host, table, column);
-            return new Border()
+            var border = new Border()
                 .BorderThickness(0, 0, 1, 1)
                 .BorderBrush(Brushes.LightGray)
                 .Background(Brushes.White)
-                .Width(column.Size)
-                .Height(35)
                 .Padding(new Thickness(2))
                 .Child(textBox);
-        }).ToArray();
+
+            ColumnLayoutPanel.SetColumnId(border, column.Id);
+            panel.Children.Add(border);
+        }
 
         return new Border()
             .BorderThickness(new Thickness(0, 0, 0, 1))
             .BorderBrush(Brushes.LightGray)
-            .Child(
-                new StackPanel()
-                    .Orientation(Orientation.Horizontal)
-                    .Children(filterControls)
-            );
+            .Child(panel);
     }
 
     private TextBox CreateFilterTextBox(ISaGridComponentHost<TData> host, Table<TData> table, Column<TData> column)

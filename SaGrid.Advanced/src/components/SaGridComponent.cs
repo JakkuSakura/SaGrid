@@ -13,6 +13,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using SaGrid.Advanced.Components;
 using SaGrid.Advanced.DragDrop;
+using SaGrid.Avalonia;
 using SaGrid.Core;
 using SaGrid.Core.Models;
 using SaGrid.SolidAvalonia;
@@ -41,6 +42,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
     private ISelectionAwareRowsControl? _virtualizedRowsControl;
     private bool _callbacksConnected;
     private int _selectionCounter;
+    private TableColumnLayoutManager<TData>? _layoutManager;
 
     // Renderers
     private readonly SaGridHeaderRenderer<TData> _headerRenderer;
@@ -375,9 +377,12 @@ public class SaGridComponent<TData> : SolidTable<TData>
 
         EnsureDragDropInfrastructure();
 
+        _layoutManager = new TableColumnLayoutManager<TData>(Table);
+
         var header = _headerRenderer.CreateHeader(
             _host,
             Table,
+            _layoutManager,
             () => _host,
             _selectionSignal?.Item1);
 
@@ -441,7 +446,9 @@ public class SaGridComponent<TData> : SolidTable<TData>
         }
 
         _bodyStructureVersion = bodyVersion;
-        var bodyControl = _bodyRenderer.CreateBody(_host, Table, () => _host, _selectionSignal?.Item1);
+        _layoutManager ??= new TableColumnLayoutManager<TData>(Table);
+
+        var bodyControl = _bodyRenderer.CreateBody(_host, Table, _layoutManager, () => _host, _selectionSignal?.Item1);
         _virtualizedRowsControl = bodyControl as ISelectionAwareRowsControl;
         _bodyHost.Content = bodyControl;
     }

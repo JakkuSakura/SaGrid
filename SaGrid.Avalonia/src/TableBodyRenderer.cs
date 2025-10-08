@@ -9,35 +9,36 @@ public class TableBodyRenderer<TData>
 
     public Control CreateBody(Table<TData> table)
     {
+        var layoutManager = new TableColumnLayoutManager<TData>(table);
+        return CreateBody(table, layoutManager);
+    }
+
+    public Control CreateBody(Table<TData> table, TableColumnLayoutManager<TData> layoutManager)
+    {
         var stack = new StackPanel { Orientation = Orientation.Vertical };
 
         foreach (var row in table.RowModel.Rows)
         {
-            stack.Children.Add(CreateRow(table, row));
+            stack.Children.Add(CreateRow(table, row, layoutManager));
         }
 
         return new ScrollViewer { Content = stack };
     }
 
-    private Control CreateRow(Table<TData> table, Row<TData> row)
+    private Control CreateRow(Table<TData> table, Row<TData> row, TableColumnLayoutManager<TData> layoutManager)
     {
-        var grid = new Grid();
-
-        foreach (var _ in table.VisibleLeafColumns)
-        {
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        }
+        var panel = layoutManager.CreatePanel();
+        panel.Height = 30;
 
         var displayIndex = row.DisplayIndex >= 0 ? row.DisplayIndex : row.Index;
 
-        for (var index = 0; index < table.VisibleLeafColumns.Count; index++)
+        foreach (var column in table.VisibleLeafColumns)
         {
-            var column = table.VisibleLeafColumns[index];
-            var cell = _cellRenderer.CreateCell(table, row, column, displayIndex);
-            Grid.SetColumn(cell, index);
-            grid.Children.Add(cell);
+            var cell = _cellRenderer.CreateCell(table, row, (Column<TData>)column, displayIndex);
+            ColumnLayoutPanel.SetColumnId(cell, column.Id);
+            panel.Children.Add(cell);
         }
 
-        return grid;
+        return panel;
     }
 }

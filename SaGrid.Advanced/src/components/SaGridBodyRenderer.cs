@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using SaGrid.Advanced.Components;
 using SaGrid.Advanced.Interfaces;
+using SaGrid.Avalonia;
 using SaGrid.Core;
 using SaGrid.Core.Models;
 
@@ -29,11 +30,12 @@ internal class SaGridBodyRenderer<TData>
     public Control CreateBody(
         ISaGridComponentHost<TData> host,
         Table<TData> table,
+        TableColumnLayoutManager<TData> layoutManager,
         Func<ISaGridComponentHost<TData>>? hostSignalGetter = null,
         Func<int>? selectionSignalGetter = null)
     {
         var initialRows = FlattenRows(table.RowModel.Rows).ToList();
-        return new VirtualizedRowsControl(host, table, initialRows, _cellRenderer, hostSignalGetter, selectionSignalGetter);
+        return new VirtualizedRowsControl(host, table, initialRows, _cellRenderer, layoutManager, hostSignalGetter, selectionSignalGetter);
     }
 
     private static IEnumerable<Row<TData>> FlattenRows(IReadOnlyList<Row<TData>> rows)
@@ -68,6 +70,7 @@ internal class SaGridBodyRenderer<TData>
         private readonly ScrollViewer _scrollViewer;
         private readonly Canvas _canvas;
         private readonly IReadOnlyList<Row<TData>> _initialRows;
+        private readonly TableColumnLayoutManager<TData> _layoutManager;
         private bool _hasRealRows;
         private int _lastKnownRowCount = -1;
         private readonly Dictionary<string, RowControlContainer> _rowControlsById = new();
@@ -78,6 +81,7 @@ internal class SaGridBodyRenderer<TData>
             Table<TData> table,
             IReadOnlyList<Row<TData>> initialRows,
             SaGridCellRenderer<TData> cellRenderer,
+            TableColumnLayoutManager<TData> layoutManager,
             Func<ISaGridComponentHost<TData>>? hostSignalGetter,
             Func<int>? selectionSignalGetter)
         {
@@ -85,6 +89,7 @@ internal class SaGridBodyRenderer<TData>
             _table = table;
             _initialRows = initialRows;
             _cellRenderer = cellRenderer;
+            _layoutManager = layoutManager;
             _hostSignalGetter = hostSignalGetter;
             _selectionSignalGetter = selectionSignalGetter;
 
@@ -289,10 +294,8 @@ internal class SaGridBodyRenderer<TData>
 
         private RowControlContainer CreateRowControl(Row<TData> row, int displayIndex, string rowId)
         {
-            var panel = new StackPanel
-            {
-                Orientation = Orientation.Horizontal
-            };
+            var panel = _layoutManager.CreatePanel();
+            panel.Height = RowHeight;
 
             var cellVisuals = new List<IReusableCellVisual<TData>>();
             var cellVisualsByColumn = new Dictionary<string, IReusableCellVisual<TData>>();
@@ -309,6 +312,7 @@ internal class SaGridBodyRenderer<TData>
                     cellVisualsByColumn[column.Id] = reusable;
                 }
 
+                ColumnLayoutPanel.SetColumnId(control, column.Id);
                 panel.Children.Add(control);
             }
 

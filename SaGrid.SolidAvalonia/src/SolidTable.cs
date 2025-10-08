@@ -47,10 +47,12 @@ public class SolidTable<TData> : Component
 
     protected virtual Control BuildContent(Table<TData> table)
     {
+        var layoutManager = new TableColumnLayoutManager<TData>(table);
+
         return new StackPanel()
             .Children(
-                CreateHeader(table),
-                CreateBody(table),
+                CreateHeader(table, layoutManager),
+                CreateBody(table, layoutManager),
                 CreateFooter(table));
     }
 
@@ -63,8 +65,13 @@ public class SolidTable<TData> : Component
     }
 
     protected virtual Control CreateHeader(Table<TData> table) => _headerRenderer.CreateHeader(table);
-
     protected virtual Control CreateBody(Table<TData> table) => _bodyRenderer.CreateBody(table);
+
+    protected virtual Control CreateHeader(Table<TData> table, TableColumnLayoutManager<TData> layoutManager) =>
+        _headerRenderer.CreateHeader(table, layoutManager);
+
+    protected virtual Control CreateBody(Table<TData> table, TableColumnLayoutManager<TData> layoutManager) =>
+        _bodyRenderer.CreateBody(table, layoutManager);
 
     protected virtual Control CreateFooter(Table<TData> table) => _footerRenderer.CreateFooter(table);
 
