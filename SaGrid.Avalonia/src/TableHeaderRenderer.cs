@@ -79,7 +79,7 @@ public class TableHeaderRenderer<TData>
     {
         var border = new Border
         {
-            BorderThickness = new Thickness(0, 0, 1, 1),
+            BorderThickness = new Thickness(0, 0, 0, 1),
             BorderBrush = Brushes.LightGray,
             Background = Brushes.LightBlue,
             Padding = new Thickness(0),
@@ -259,16 +259,27 @@ public class TableHeaderRenderer<TData>
 
         resizerContainer.SetValue(Panel.ZIndexProperty, 1);
 
-        resizerContainer.Children.Add(new Border
+        var line = new Border
         {
             Width = 1,
             Background = Brushes.LightGray,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Stretch
-        });
+        };
+        resizerContainer.Children.Add(line);
 
         thumb.SetValue(Panel.ZIndexProperty, 1);
         resizerContainer.Children.Add(thumb);
+
+        thumb.PointerEntered += (_, _) =>
+        {
+            line.Background = new SolidColorBrush(Colors.SteelBlue);
+        };
+
+        thumb.PointerExited += (_, _) =>
+        {
+            line.Background = Brushes.LightGray;
+        };
 
         return resizerContainer;
     }

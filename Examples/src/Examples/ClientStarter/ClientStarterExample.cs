@@ -27,7 +27,8 @@ internal sealed class ClientStarterExample : IExample
             EnableColumnFilters = true,
             EnableRowSelection = true,
             EnableCellSelection = true,
-            EnableGlobalFilter = true
+            EnableGlobalFilter = true,
+            EnableColumnResizing = true
         };
 
         var grid = new SaGrid<Person>(options);

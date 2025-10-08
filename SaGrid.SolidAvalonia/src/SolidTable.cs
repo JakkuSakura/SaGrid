@@ -1,10 +1,5 @@
-using Avalonia.Controls;
-using Avalonia.Media;
 using Avalonia.Markup.Declarative;
-using SaGrid.Avalonia;
 using SaGrid.Core.Models;
-using SolidAvalonia;
-using static SolidAvalonia.Solid;
 
 namespace SaGrid.SolidAvalonia;
 
