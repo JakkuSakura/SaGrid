@@ -69,7 +69,7 @@ internal sealed class BatchEditingExample : IExample
                     BorderBrush = Brushes.LightGray,
                     BorderThickness = new Thickness(1),
                     Padding = new Thickness(4),
-                    Child = new SaGridComponent<Person>(grid)
+                    Child = grid.Component
                 }
             }
         };

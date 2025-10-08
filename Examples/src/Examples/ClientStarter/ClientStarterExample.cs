@@ -65,6 +65,11 @@ internal sealed class ClientStarterExample : IExample
         Grid.SetRow(capabilityPanel, 2);
         layout.Children.Add(capabilityPanel);
 
+        var gridComponent = grid.Component;
+        gridComponent.HorizontalAlignment = HorizontalAlignment.Stretch;
+        gridComponent.VerticalAlignment = VerticalAlignment.Stretch;
+        gridComponent.MinHeight = 360;
+
         var gridHost = new Border
         {
             BorderBrush = Brushes.LightGray,
@@ -72,12 +77,7 @@ internal sealed class ClientStarterExample : IExample
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(4),
             Background = Brushes.White,
-            Child = new SaGridComponent<Person>(grid)
-            {
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                MinHeight = 360
-            }
+            Child = gridComponent
         };
         Grid.SetRow(gridHost, 3);
         layout.Children.Add(gridHost);

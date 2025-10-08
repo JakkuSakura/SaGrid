@@ -141,7 +141,7 @@ public sealed class AggregationService : IAggregationService
             aggregatedValues[columnId] = bucket.RawKey;
 
             var groupId = CreateGroupRowId(parent, columnId, bucket.Index);
-            var groupRow = new Row<TData>(grid, groupId, runningIndex++, default!, level, parent, aggregatedValues, isGroupRow: true);
+            var groupRow = new Row<TData>(grid.InnerTable, groupId, runningIndex++, default!, level, parent, aggregatedValues, isGroupRow: true);
             groupRow.SetGroupInfo(columnId, bucket.RawKey);
 
             flatRows.Add(groupRow);
@@ -162,7 +162,7 @@ public sealed class AggregationService : IAggregationService
 
     private Row<TData> CloneLeafRow<TData>(SaGrid<TData> grid, Row<TData> original, int depth, Row<TData>? parent, int position)
     {
-        return new Row<TData>(grid, original.Id, position, original.Original, depth, parent);
+        return new Row<TData>(grid.InnerTable, original.Id, position, original.Original, depth, parent);
     }
 
     private IReadOnlyDictionary<string, object?> ComputeColumnTotals<TData>(SaGrid<TData> grid, IEnumerable<Row<TData>> rows)

@@ -51,7 +51,7 @@ public class GroupingService : IGroupingService
             return;
         }
 
-        GroupingExtensions.SetGrouping(grid, ordered);
+        GroupingExtensions.SetGrouping(grid.InnerTable, ordered);
         SynchroniseMetadata(grid, ordered);
         NotifyGroupingChanged(grid, ordered, ClientSideRowModelStage.Group);
     }
@@ -72,7 +72,7 @@ public class GroupingService : IGroupingService
         index = Math.Clamp(index, 0, current.Count);
         current.Insert(index, columnId);
 
-        GroupingExtensions.SetGrouping(grid, current);
+        GroupingExtensions.SetGrouping(grid.InnerTable, current);
         SynchroniseMetadata(grid, current);
         NotifyGroupingChanged(grid, current, ClientSideRowModelStage.Group);
     }
@@ -88,7 +88,7 @@ public class GroupingService : IGroupingService
             return;
         }
 
-        GroupingExtensions.SetGrouping(grid, current);
+        GroupingExtensions.SetGrouping(grid.InnerTable, current);
         SynchroniseMetadata(grid, current);
         NotifyGroupingChanged(grid, current, ClientSideRowModelStage.Group);
     }
@@ -107,7 +107,7 @@ public class GroupingService : IGroupingService
         targetIndex = Math.Clamp(targetIndex, 0, current.Count);
         current.Insert(targetIndex, columnId);
 
-        GroupingExtensions.SetGrouping(grid, current);
+        GroupingExtensions.SetGrouping(grid.InnerTable, current);
         SynchroniseMetadata(grid, current);
         NotifyGroupingChanged(grid, current, ClientSideRowModelStage.Group);
     }
@@ -121,7 +121,7 @@ public class GroupingService : IGroupingService
             return;
         }
 
-        GroupingExtensions.SetGrouping(grid, Array.Empty<string>());
+        GroupingExtensions.SetGrouping(grid.InnerTable, Array.Empty<string>());
         SynchroniseMetadata(grid, Array.Empty<string>());
         NotifyGroupingChanged(grid, Array.Empty<string>(), ClientSideRowModelStage.Map);
     }

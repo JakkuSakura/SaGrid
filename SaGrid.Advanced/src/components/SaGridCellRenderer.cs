@@ -1,18 +1,19 @@
 using System;
 using System.Linq;
-using Avalonia.Controls;
-using Avalonia.Layout;
-using Avalonia.Media;
-using Avalonia.Markup.Declarative;
-using SolidAvalonia;
-using SaGrid.Advanced.Modules.Editing;
-using SaGrid.Advanced.Interfaces;
-using SaGrid.Core;
-using static SolidAvalonia.Solid;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Layout;
+using Avalonia.Markup.Declarative;
+using Avalonia.Media;
 using Avalonia.VisualTree;
-using SaGrid.Advanced;
+using SaGrid.Advanced.Components;
+using SaGrid.Advanced.Interfaces;
+using SaGrid.Advanced.Modules.Editing;
+using SaGrid.Core;
+using SaGrid.Core.Models;
+using SolidAvalonia;
+using static SolidAvalonia.Solid;
 
 namespace SaGrid;
 
@@ -23,9 +24,9 @@ internal interface IReusableCellVisual<TData>
 
 internal class SaGridCellRenderer<TData>
 {
-    public Control CreateCell(SaGrid<TData> saGrid, Row<TData> row, Column<TData> column, int displayIndex)
+    public Control CreateCell(ISaGridComponentHost<TData> host, Row<TData> row, Column<TData> column, int displayIndex)
     {
-        var firstColumnId = saGrid.VisibleLeafColumns.FirstOrDefault()?.Id;
+        var firstColumnId = host.VisibleLeafColumns.FirstOrDefault()?.Id;
         var indent = column.Id == firstColumnId ? row.Depth * 16 : 0;
 
         var displayFactory = new Func<Control>(() => new TextBlock()
@@ -41,48 +42,47 @@ internal class SaGridCellRenderer<TData>
             .Width(column.Size)
             .Height(30);
 
-        border.Child = new EditingCellPresenter<TData>(saGrid, row, column, displayFactory);
+        border.Child = new EditingCellPresenter<TData>(host, row, column, displayFactory);
         return border;
     }
 
     public Control CreateReactiveCell(
-        SaGrid<TData> saGrid,
+        ISaGridComponentHost<TData> host,
         Row<TData> row,
         Column<TData> column,
         int displayIndex,
-        Func<SaGrid<TData>> gridSignalGetter,
+        Func<ISaGridComponentHost<TData>> hostSignalGetter,
         Func<int>? selectionSignalGetter = null)
     {
-        var gridSignal = gridSignalGetter ?? (() => saGrid);
-        return new ReactiveCellComponent<TData>(saGrid, row, column, displayIndex, gridSignal, selectionSignalGetter, this);
+        var hostSignal = hostSignalGetter ?? (() => host);
+        return new ReactiveCellComponent<TData>(host, row, column, displayIndex, hostSignal, selectionSignalGetter, this);
     }
 
     internal IBrush GetCellBackground(bool isSelected, bool isActiveCell, int rowIndex)
     {
         if (isActiveCell)
         {
-            return new SolidColorBrush(Colors.Orange); // Active cell is orange
+            return new SolidColorBrush(Colors.Orange);
         }
-        
+
         if (isSelected)
         {
-            return new SolidColorBrush(Colors.LightBlue); // Selected cell is light blue
+            return new SolidColorBrush(Colors.LightBlue);
         }
-        
-        // Alternate row colors for better readability
-        return rowIndex % 2 == 0 
-            ? Brushes.White 
-            : new SolidColorBrush(Color.FromRgb(248, 248, 248)); // Very light gray
+
+        return rowIndex % 2 == 0
+            ? Brushes.White
+            : new SolidColorBrush(Color.FromRgb(248, 248, 248));
     }
 }
 
 internal sealed class ReactiveCellComponent<TData> : Component, IReusableCellVisual<TData>
 {
-    private readonly SaGrid<TData> _grid;
+    private readonly ISaGridComponentHost<TData> _host;
     private readonly Row<TData> _row;
     private readonly Column<TData> _column;
     private int _displayIndex;
-    private readonly Func<SaGrid<TData>> _gridSignalGetter;
+    private readonly Func<ISaGridComponentHost<TData>> _hostSignalGetter;
     private readonly Func<int>? _selectionSignalGetter;
     private readonly SaGridCellRenderer<TData> _renderer;
 
@@ -91,24 +91,23 @@ internal sealed class ReactiveCellComponent<TData> : Component, IReusableCellVis
     private double _indent;
 
     public ReactiveCellComponent(
-        SaGrid<TData> grid,
+        ISaGridComponentHost<TData> host,
         Row<TData> row,
         Column<TData> column,
         int displayIndex,
-        Func<SaGrid<TData>> gridSignalGetter,
+        Func<ISaGridComponentHost<TData>> hostSignalGetter,
         Func<int>? selectionSignalGetter,
         SaGridCellRenderer<TData> renderer) : base(true)
     {
-        _grid = grid;
+        _host = host;
         _row = row;
         _column = column;
         _displayIndex = displayIndex;
-        _gridSignalGetter = gridSignalGetter;
+        _hostSignalGetter = hostSignalGetter;
         _selectionSignalGetter = selectionSignalGetter;
         _renderer = renderer;
-        _ = _selectionSignalGetter; // suppress unused-field warnings when deltas drive updates
+        _ = _selectionSignalGetter;
 
-        // Activate lifecycle now that required state is assigned.
         OnCreatedCore();
         Initialize();
     }
@@ -127,7 +126,7 @@ internal sealed class ReactiveCellComponent<TData> : Component, IReusableCellVis
             .HorizontalAlignment(HorizontalAlignment.Left)
             .Margin(new Thickness(8 + _indent, 0, 0, 0));
 
-        _presenter = new EditingCellPresenter<TData>(_grid, _row, _column, displayFactory);
+        _presenter = new EditingCellPresenter<TData>(_host, _row, _column, displayFactory);
         _border.Child = _presenter;
 
         _border.PointerPressed += OnPointerPressed;
@@ -141,24 +140,24 @@ internal sealed class ReactiveCellComponent<TData> : Component, IReusableCellVis
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var isCtrlPressed = e.KeyModifiers.HasFlag(KeyModifiers.Control);
-        _grid.SelectCell(_displayIndex, _column.Id, isCtrlPressed);
+        _host.SelectCell(_displayIndex, _column.Id, isCtrlPressed);
         e.Handled = true;
     }
 
     private void UpdateVisualState()
     {
-        var currentGrid = _gridSignalGetter();
+        var currentHost = _hostSignalGetter();
 
         if (_border == null)
         {
             return;
         }
 
-        var isSelected = currentGrid?.IsCellSelected(_displayIndex, _column.Id) ?? false;
-        var activeCell = currentGrid?.GetActiveCell();
+        var isSelected = currentHost?.IsCellSelected(_displayIndex, _column.Id) ?? false;
+        var activeCell = currentHost?.GetActiveCell();
         var isActiveCell = activeCell?.RowIndex == _displayIndex && activeCell?.ColumnId == _column.Id;
 
-        var firstColumnId = currentGrid?.VisibleLeafColumns.FirstOrDefault()?.Id;
+        var firstColumnId = currentHost?.VisibleLeafColumns.FirstOrDefault()?.Id;
         _indent = _column.Id == firstColumnId ? _row.Depth * 16 : 0;
 
         _border.Background = _renderer.GetCellBackground(isSelected, isActiveCell, _displayIndex);
@@ -192,33 +191,33 @@ internal sealed class ReactiveCellComponent<TData> : Component, IReusableCellVis
 
 internal sealed class EditingCellPresenter<TData> : ContentControl
 {
-    private readonly SaGrid<TData> _grid;
+    private readonly ISaGridComponentHost<TData> _host;
     private readonly Row<TData> _row;
     private readonly Column<TData> _column;
     private readonly Func<Control> _displayFactory;
     private readonly ICellEditorService<TData> _editingService;
 
-    public EditingCellPresenter(SaGrid<TData> grid, Row<TData> row, Column<TData> column, Func<Control> displayFactory)
+    public EditingCellPresenter(ISaGridComponentHost<TData> host, Row<TData> row, Column<TData> column, Func<Control> displayFactory)
     {
-        _grid = grid;
+        _host = host;
         _row = row;
         _column = column;
         _displayFactory = displayFactory;
-        _editingService = grid.GetEditingService();
+        _editingService = host.GetEditingService();
         _editingService.EditingStateChanged += OnEditingStateChanged;
 
         SetDisplay();
 
         DoubleTapped += (_, e) =>
         {
-            _grid.BeginCellEdit(_row, _column);
+            _host.BeginCellEdit(_row, _column);
             e.Handled = true;
         };
     }
 
     private void OnEditingStateChanged(object? sender, CellEditingChangedEventArgs<TData> e)
     {
-        if (!ReferenceEquals(e.Grid, _grid))
+        if (!_host.IsSameGrid(e.Grid))
         {
             return;
         }

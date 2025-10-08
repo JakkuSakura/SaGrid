@@ -1,23 +1,24 @@
-using Avalonia.Controls;
-using Avalonia.Layout;
-using Avalonia.Media;
-using Avalonia.Markup.Declarative;
-using SolidAvalonia;
-using SaGrid.Core;
-using SaGrid.Advanced;
-using SaGrid.Advanced.DragDrop;
-using static SolidAvalonia.Solid;
-using Avalonia;
-using Avalonia.Input;
-using Avalonia.Interactivity;
-using Avalonia.Threading;
-using Avalonia.VisualTree;
-using System.Linq;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using SaGrid.SolidAvalonia;
+using System.Linq;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Markup.Declarative;
+using Avalonia.Media;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using SaGrid.Advanced.components;
+using SaGrid.Advanced.Components;
+using SaGrid.Advanced.DragDrop;
+using SaGrid.Core;
 using SaGrid.Core.Models;
+using SaGrid.SolidAvalonia;
+using SolidAvalonia;
+using static SolidAvalonia.Solid;
 
 using GridControl = Avalonia.Controls.Grid;
 
@@ -25,7 +26,7 @@ namespace SaGrid;
 
 public class SaGridComponent<TData> : SolidTable<TData>
 {
-    private readonly SaGrid<TData> _saGrid;
+    private readonly ISaGridComponentHost<TData> _host;
     private (Func<int>, Action<int>)? _selectionSignal;
     private Grid? _rootGrid;
     private Border? _rootBorder;
@@ -33,7 +34,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
     private ContentControl? _bodyHost;
     private ContentControl? _footerHost;
     private readonly Dictionary<string, TextBox> _filterTextBoxes = new();
-    private int _themeTick = 0;
+    private int _themeTick;
     private string _headerStructureVersion = string.Empty;
     private string _filterVersion = string.Empty;
     private string _bodyStructureVersion = string.Empty;
@@ -51,34 +52,16 @@ public class SaGridComponent<TData> : SolidTable<TData>
     private (Func<Table<TData>> Getter, Action<Table<TData>> Setter) TableSignalValue =>
         TableSignal ?? throw new InvalidOperationException("Table signal not initialized.");
 
-    private SaGrid<TData> CurrentGrid => (SaGrid<TData>)TableSignalValue.Getter();
-
-    public SaGrid<TData> Grid => CurrentGrid;
-
-    public SaGridComponent(SaGrid<TData> saGrid) : base(saGrid.Options, saGrid)
+    internal SaGridComponent(ISaGridComponentHost<TData> host, Table<TData> table)
+        : base(host.Options, table)
     {
-        _saGrid = saGrid;
-        
-        // Initialize renderers
+        _host = host ?? throw new ArgumentNullException(nameof(host));
+
         _headerRenderer = new SaGridHeaderRenderer<TData>(
             _ => { },
-            (columnId, textBox) =>
-            {
-                _filterTextBoxes[columnId] = textBox;
-            });
+            (columnId, textBox) => { _filterTextBoxes[columnId] = textBox; });
         _bodyRenderer = new SaGridBodyRenderer<TData>();
         _footerRenderer = new SaGridFooterRenderer<TData>();
-    }
-    
-    protected override void OnTableInitialized(Table<TData> table)
-    {
-        base.OnTableInitialized(table);
-        if (table is not SaGrid<TData>)
-        {
-            throw new InvalidOperationException("SaGridComponent requires SaGrid table instance.");
-        }
-
-        _callbacksConnected = false;
     }
 
     protected override Control BuildContent(Table<TData> currentTable)
@@ -86,7 +69,6 @@ public class SaGridComponent<TData> : SolidTable<TData>
         EnsureSelectionSignal();
         EnsureCallbacks();
 
-        // Build the root container once to avoid reparenting and keep header TextBoxes stable
         if (_rootGrid == null)
         {
             _rootGrid = new GridControl
@@ -117,30 +99,29 @@ public class SaGridComponent<TData> : SolidTable<TData>
                 .Child(_rootGrid);
 
             RebuildHeaderStructure();
-
             EnsureBodyControl(force: true);
 
             _footerHost.Content = Reactive(() =>
             {
-                var currentGrid = Grid;
+                // Ensure dependency on selection ticks so footer reacts to state changes
                 var selTick = _selectionSignal?.Item1();
-                
-                // Don't show footer if status bar is visible (to avoid duplicate pagination)
-                if (currentGrid.IsStatusBarVisible())
+                _ = selTick;
+
+                if (_host.IsStatusBarVisible())
                 {
-                    return new StackPanel(); // Empty footer
+                    return new StackPanel();
                 }
-                
-                return _footerRenderer.CreateFooter(currentGrid);
+
+                return _footerRenderer.CreateFooter(_host);
             });
         }
+
         EnsureBodyControl();
         return _rootBorder!;
     }
 
     protected override Control WrapContent(Table<TData> table, Control content)
     {
-        // Content already wrapped in _rootBorder
         return content;
     }
 
@@ -164,11 +145,11 @@ public class SaGridComponent<TData> : SolidTable<TData>
         var tableSignal = TableSignalValue;
         var (_, selectionSetter) = _selectionSignal.Value;
 
-        _saGrid.SetUIUpdateCallbacks(
+        _host.SetUIUpdateCallbacks(
             () =>
             {
                 _themeTick++;
-                tableSignal.Setter(_saGrid);
+                tableSignal.Setter(Table);
                 selectionSetter(++_selectionCounter);
                 HandleHeaderStateChanges();
             },
@@ -192,14 +173,12 @@ public class SaGridComponent<TData> : SolidTable<TData>
             return;
         }
 
-        var grid = CurrentGrid;
-
-        _dragValidationService ??= new DragValidationService<TData>(grid);
-        _dragDropManager ??= new DragDropManager<TData>(grid.GetEventService(), _rootGrid, _dragValidationService);
+        _dragValidationService ??= new DragValidationService<TData>(Table);
+        _dragDropManager ??= new DragDropManager<TData>(_host.GetEventService(), _rootGrid, _dragValidationService);
 
         if (_dragDropManager != null)
         {
-            _headerRenderer.EnableInteractivity(_dragDropManager, grid.GetColumnInteractiveService());
+            _headerRenderer.EnableInteractivity(_dragDropManager, _host.GetColumnInteractiveService());
         }
     }
 
@@ -229,22 +208,25 @@ public class SaGridComponent<TData> : SolidTable<TData>
 
     private string ComputeHeaderStructureVersion()
     {
-        var grid = CurrentGrid;
-        var columnsSignature = string.Join("|", grid.VisibleLeafColumns.Select(c => $"{c.Id}:{c.Size}").ToArray());
-        var sortingSignature = grid.State.Sorting != null
-            ? string.Join("|", grid.State.Sorting.Columns.Select(c => $"{c.Id}:{c.Direction}").ToArray())
+        var columnsSignature = string.Join(
+            "|",
+            _host.VisibleLeafColumns.Select(c => $"{c.Id}:{c.Size}").ToArray());
+
+        var sortingSignature = _host.State.Sorting != null
+            ? string.Join("|", _host.State.Sorting.Columns.Select(c => $"{c.Id}:{c.Direction}").ToArray())
             : string.Empty;
-        var groupingSignature = string.Join("|", grid.GetGroupedColumnIds());
-        var multiSort = grid.IsMultiSortEnabled() ? "1" : "0";
+
+        var groupingSignature = string.Join("|", _host.GetGroupedColumnIds());
+        var multiSort = _host.IsMultiSortEnabled() ? "1" : "0";
+
         return $"cols={columnsSignature};sort={sortingSignature};group={groupingSignature};multi={multiSort}";
     }
 
     private string ComputeBodyStructureVersion()
     {
-        var grid = CurrentGrid;
         var columnSignature = string.Join(
             "|",
-            grid.VisibleLeafColumns
+            _host.VisibleLeafColumns
                 .Select(c => $"{c.Id}:{c.Size.ToString(CultureInfo.InvariantCulture)}:{c.PinnedPosition ?? "-"}")
                 .ToArray());
 
@@ -253,7 +235,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
 
     private string ComputeFilterVersion()
     {
-        var filters = CurrentGrid.State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
+        var filters = _host.State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
         return string.Join("|", filters.OrderBy(f => f.Id).Select(f => $"{f.Id}:{f.Value}").ToArray());
     }
 
@@ -266,11 +248,12 @@ public class SaGridComponent<TData> : SolidTable<TData>
 
         EnsureDragDropInfrastructure();
 
-        var current = CurrentGrid;
         var header = _headerRenderer.CreateHeader(
-            current,
-            () => CurrentGrid,
+            _host,
+            Table,
+            () => _host,
             _selectionSignal?.Item1);
+
         if (header is Control hdrCtrl)
         {
             hdrCtrl.SetValue(Panel.ZIndexProperty, 1);
@@ -331,17 +314,15 @@ public class SaGridComponent<TData> : SolidTable<TData>
         }
 
         _bodyStructureVersion = bodyVersion;
-        var current = CurrentGrid;
-        var bodyControl = _bodyRenderer.CreateBody(current, () => CurrentGrid, _selectionSignal?.Item1);
+        var bodyControl = _bodyRenderer.CreateBody(_host, Table, () => _host, _selectionSignal?.Item1);
         _virtualizedRowsControl = bodyControl as ISelectionAwareRowsControl;
         _bodyHost.Content = bodyControl;
     }
 
     private string GetFilterText(string columnId)
     {
-        var filters = CurrentGrid.State.ColumnFilters?.Filters;
+        var filters = _host.State.ColumnFilters?.Filters;
         var value = filters?.FirstOrDefault(f => f.Id == columnId)?.Value;
         return value?.ToString() ?? string.Empty;
     }
-
 }

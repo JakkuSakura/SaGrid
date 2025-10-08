@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Media;
 using Avalonia.Threading;
+using SaGrid.Advanced.Components;
 using SaGrid.Advanced.Interactive;
 using SaGrid.Advanced.Interfaces;
 using SaGrid.Core;
@@ -287,24 +288,21 @@ public class ColumnDropZone<TData> : IDropZone
 /// <summary>
 /// Row grouping drop zone for advanced grouping features
 /// </summary>
-public class GroupingDropZone<TData> : IDropZone
+internal class GroupingDropZone<TData> : IDropZone
 {
     private readonly Panel _groupingPanel;
-    private readonly IGroupingService _groupingService;
-    private readonly SaGrid<TData> _grid;
+    private readonly ISaGridComponentHost<TData> _host;
     private readonly Visual _rootVisual;
 
     private int _dropIndex = -1;
     private bool _dropBefore = true;
     
     public GroupingDropZone(Panel groupingPanel,
-        IGroupingService groupingService,
-        SaGrid<TData> grid,
+        ISaGridComponentHost<TData> host,
         Visual rootVisual)
     {
         _groupingPanel = groupingPanel;
-        _groupingService = groupingService;
-        _grid = grid;
+        _host = host;
         _rootVisual = rootVisual;
     }
 
@@ -350,7 +348,7 @@ public class GroupingDropZone<TData> : IDropZone
 
         CalculateDropPosition(local.Value);
 
-        var groupedIds = _groupingService.GetGroupedColumnIds(_grid);
+        var groupedIds = _host.GetGroupedColumnIds();
         var insertIndex = _dropIndex >= 0 ? _dropIndex : groupedIds.Count;
         insertIndex = Math.Clamp(insertIndex, 0, groupedIds.Count);
 
@@ -376,11 +374,11 @@ public class GroupingDropZone<TData> : IDropZone
                 return false;
             }
 
-            _groupingService.MoveGroupingColumn(_grid, column.Id, insertIndex);
+            _host.MoveGroupingColumn(column.Id, insertIndex);
         }
         else
         {
-            _groupingService.AddGroupingColumn(_grid, column.Id, insertIndex);
+            _host.AddGroupingColumn(column.Id, insertIndex);
         }
 
         ShowGroupingFeedback(column.Id);

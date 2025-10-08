@@ -1,10 +1,9 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Markup.Declarative;
-using SaGrid.Core;
-using Avalonia;
-using SaGrid.Advanced;
+using SaGrid.Advanced.Components;
 using SolidAvalonia;
 using static SolidAvalonia.Solid;
 
@@ -12,9 +11,9 @@ namespace SaGrid;
 
 internal class SaGridFooterRenderer<TData>
 {
-    public Control CreateFooter(SaGrid<TData> saGrid)
+    public Control CreateFooter(ISaGridComponentHost<TData> host)
     {
-        if (!saGrid.Options.EnablePagination)
+        if (!host.Options.EnablePagination)
         {
             return new StackPanel(); // Empty footer if pagination is disabled
         }
@@ -22,10 +21,10 @@ internal class SaGridFooterRenderer<TData>
         return (Control)Reactive(() =>
         {
             // Depend on grid reactive signal via visible row count
-            var pageIndex = saGrid.State.Pagination?.PageIndex ?? 0;
-            var pageSize = saGrid.State.Pagination?.PageSize ?? 10;
+            var pageIndex = host.State.Pagination?.PageIndex ?? 0;
+            var pageSize = host.State.Pagination?.PageSize ?? 10;
             // Use filtered total (PrePaginationRowModel) for page count consistency
-            var totalRows = saGrid.PrePaginationRowModel.Rows.Count;
+            var totalRows = host.PrePaginationRowModel.Rows.Count;
             var totalPages = Math.Max(1, (int)Math.Ceiling((double)totalRows / pageSize));
             var currentPage = pageIndex + 1; // Convert to 1-based
 
@@ -37,7 +36,7 @@ internal class SaGridFooterRenderer<TData>
             previousBtn.Click += (s, e) =>
             {
                 var newIndex = Math.Max(0, pageIndex - 1);
-                saGrid.SetPageIndex(newIndex);
+                host.SetPageIndex(newIndex);
             };
 
             var nextBtn = new Button()
@@ -47,7 +46,7 @@ internal class SaGridFooterRenderer<TData>
             nextBtn.Click += (s, e) =>
             {
                 var newIndex = Math.Min(totalPages - 1, pageIndex + 1);
-                saGrid.SetPageIndex(newIndex);
+                host.SetPageIndex(newIndex);
             };
 
             return new Border()

@@ -1,6 +1,9 @@
 using System.Collections.ObjectModel;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using SaGrid.Advanced.Components;
 using SaGrid.Advanced.Context;
 using SaGrid.Advanced.Events;
 using SaGrid.Advanced.Interactive;
@@ -19,37 +22,105 @@ using SaGrid.Core.Models;
 
 namespace SaGrid.Advanced;
 
-public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
+public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 {
+    private readonly Table<TData> _table;
+    private readonly SaGridComponent<TData> _component;
     private string? _quickFilter;
     
     // Callback for UI updates
     private Action? _onGridUpdate;
     private Action<CellSelectionDelta?>? _onSelectionUpdate;
-    private readonly ExportService _exportService;
-    private readonly CellSelectionService _cellSelectionService;
-    private readonly SortingEnhancementsService _sortingEnhancementsService;
-    private readonly SideBarService _sideBarService;
-    private readonly IFilterService _filterService;
-    private readonly ICellEditorService<TData> _cellEditorService;
-    private readonly BatchEditManager<TData> _batchEditManager;
-    private readonly IAggregationService _aggregationService;
-    private readonly IGroupingService _groupingService;
-    private readonly StatusBarService _statusBarService;
-    private readonly IEventService _eventService;
-    private readonly IChartIntegrationService _chartIntegrationService;
-    private readonly IExportCoordinator _exportCoordinator;
-    private readonly IClientSideRowModel<TData> _clientSideRowModel;
-    private readonly ColumnInteractiveService<TData> _columnInteractiveService;
-    private readonly IServerSideRowModel<TData>? _serverSideRowModel;
-    private readonly RowModelType _rowModelType;
-    private readonly int _serverSideBlockSize;
+    private ExportService _exportService = default!;
+    private CellSelectionService _cellSelectionService = default!;
+    private SortingEnhancementsService _sortingEnhancementsService = default!;
+    private SideBarService _sideBarService = default!;
+    private IFilterService _filterService = default!;
+    private ICellEditorService<TData> _cellEditorService = default!;
+    private BatchEditManager<TData> _batchEditManager = default!;
+    private IAggregationService _aggregationService = default!;
+    private IGroupingService _groupingService = default!;
+    private StatusBarService _statusBarService = default!;
+    private IEventService _eventService = default!;
+    private IChartIntegrationService _chartIntegrationService = default!;
+    private IExportCoordinator _exportCoordinator = default!;
+    private IClientSideRowModel<TData> _clientSideRowModel = default!;
+    private ColumnInteractiveService<TData> _columnInteractiveService = default!;
+    private IServerSideRowModel<TData>? _serverSideRowModel;
+    private RowModelType _rowModelType;
+    private int _serverSideBlockSize;
 
     public event EventHandler? RowDataChanged;
 
-    public SaGrid(TableOptions<TData> options) : base(options)
+    private Table<TData> Table => _component?.Table ?? _table;
+
+    internal Table<TData> InnerTable => Table;
+    public SaGridComponent<TData> Component => _component;
+
+    public TableOptions<TData> Options => Table.Options;
+    public TableState<TData> State => Table.State;
+    public IReadOnlyList<Column<TData>> AllColumns => Table.AllColumns;
+    public IReadOnlyList<Column<TData>> AllLeafColumns => Table.AllLeafColumns;
+    public IReadOnlyList<Column<TData>> VisibleLeafColumns => Table.VisibleLeafColumns;
+    public IReadOnlyList<HeaderGroup<TData>> HeaderGroups => Table.HeaderGroups;
+    public IReadOnlyList<HeaderGroup<TData>> FooterGroups => Table.FooterGroups;
+    public RowModel<TData> RowModel => Table.RowModel;
+    public RowModel<TData> PreFilteredRowModel => Table.PreFilteredRowModel;
+    public RowModel<TData> PreSortedRowModel => Table.PreSortedRowModel;
+    public RowModel<TData> PreGroupedRowModel => Table.PreGroupedRowModel;
+    public RowModel<TData> PreExpandedRowModel => Table.PreExpandedRowModel;
+    public RowModel<TData> PrePaginationRowModel => Table.PrePaginationRowModel;
+
+    public void SetState(TableState<TData> state, bool updateRowModel = true) => Table.SetState(state, updateRowModel);
+    public void SetState(Updater<TableState<TData>> updater, bool updateRowModel = true) => Table.SetState(updater, updateRowModel);
+    public Column<TData>? GetColumn(string columnId) => Table.GetColumn(columnId);
+    public Row<TData>? GetRow(string rowId) => Table.GetRow(rowId);
+    public IReadOnlyList<Row<TData>> GetSelectedRowModel() => Table.GetSelectedRowModel();
+    public void ResetColumnFilters() { Table.ResetColumnFilters(); ScheduleUIUpdate(); }
+    public void ResetGlobalFilter() { Table.ResetGlobalFilter(); ScheduleUIUpdate(); }
+    public void ResetSorting() { Table.ResetSorting(); ScheduleUIUpdate(); }
+    public void ResetRowSelection() { Table.ResetRowSelection(); ScheduleUIUpdate(); }
+    public void ResetColumnOrder() { Table.ResetColumnOrder(); ScheduleUIUpdate(); }
+    public void ResetColumnSizing() { Table.ResetColumnSizing(); ScheduleUIUpdate(); }
+    public void ResetColumnVisibility() { Table.ResetColumnVisibility(); ScheduleUIUpdate(); }
+    public void ResetExpanded() { Table.ResetExpanded(); ScheduleUIUpdate(); }
+    public void ResetGrouping() { Table.ResetGrouping(); ScheduleUIUpdate(); }
+    public void ResetPagination() { Table.ResetPagination(); ScheduleUIUpdate(); }
+    public int GetPageCount() => Table.GetPageCount();
+    public bool GetCanPreviousPage() => Table.GetCanPreviousPage();
+    public bool GetCanNextPage() => Table.GetCanNextPage();
+    public void FirstPage() { Table.FirstPage(); ScheduleUIUpdate(); }
+    public void LastPage() { Table.LastPage(); ScheduleUIUpdate(); }
+    public bool GetIsAllRowsSelected() => Table.GetIsAllRowsSelected();
+    public bool GetIsSomeRowsSelected() => Table.GetIsSomeRowsSelected();
+    public void SelectAllRows() { Table.SelectAllRows(); ScheduleUIUpdate(); }
+    public void DeselectAllRows() { Table.DeselectAllRows(); ScheduleUIUpdate(); }
+    public void ToggleAllRowsSelected() { Table.ToggleAllRowsSelected(); ScheduleUIUpdate(); }
+    public void SetRowSelection(string rowId, bool selected) { Table.SetRowSelection(rowId, selected); ScheduleUIUpdate(); }
+    public void SelectRowRange(int startIndex, int endIndex) { Table.SelectRowRange(startIndex, endIndex); ScheduleUIUpdate(); }
+    public int GetSelectedRowCount() => Table.GetSelectedRowCount();
+    public int GetTotalRowCount() => Table.GetTotalRowCount();
+
+    public SaGrid(TableOptions<TData> options)
     {
         SaGridModules.EnsureInitialized();
+        var table = new Table<TData>(options);
+        _table = table;
+        _component = new SaGridComponent<TData>(this, table);
+        Initialize(table, options);
+    }
+
+    // Constructor for test compatibility
+    public SaGrid(Table<TData> table)
+    {
+        SaGridModules.EnsureInitialized();
+        _table = table;
+        _component = new SaGridComponent<TData>(this, table);
+        Initialize(table, table.Options);
+    }
+
+    private void Initialize(Table<TData> table, TableOptions<TData> options)
+    {
         var context = ModuleRegistry.Context;
         _rowModelType = ResolveRowModelType(options);
         _serverSideBlockSize = ResolveServerBlockSize(options);
@@ -68,8 +139,8 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         var editorRegistry = context.Resolve<ICellEditorRegistry>();
         _cellEditorService = editorRegistry.GetOrCreate<TData>();
         _batchEditManager = _cellEditorService.GetBatchManager(this);
-        _clientSideRowModel = new ClientSideRowModel<TData>(this);
-        _columnInteractiveService = new ColumnInteractiveService<TData>(this, _eventService);
+        _clientSideRowModel = new ClientSideRowModel<TData>(this, table);
+        _columnInteractiveService = new ColumnInteractiveService<TData>(table, _eventService);
         if (_rowModelType == RowModelType.ServerSide)
         {
             _serverSideRowModel = new ServerSideRowModel<TData>(this, _serverSideBlockSize);
@@ -79,7 +150,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         {
             _serverSideRowModel = null;
         }
-        
+
         _sideBarService.EnsureDefaultPanels(this);
         if (_filterService is FilterService filterServiceImpl)
         {
@@ -88,87 +159,34 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         _statusBarService.EnsureDefaultWidgets(this);
         _chartIntegrationService.AttachToGrid(this);
         _exportCoordinator.AttachToGrid(this);
-        
+
         if (_rowModelType == RowModelType.ClientSide)
         {
             _clientSideRowModel.Start();
         }
-        
-        // Emit grid ready event
-        _eventService.DispatchEvent(GridEventTypes.GridReady, new GridReadyEventArgs(this));
-    }
 
-    // Constructor for test compatibility  
-    public SaGrid(Table<TData> table) : base(table.Options)
-    {
-        SaGridModules.EnsureInitialized();
-        var context = ModuleRegistry.Context;
-        _rowModelType = ResolveRowModelType(table.Options);
-        _serverSideBlockSize = ResolveServerBlockSize(table.Options);
-        _exportService = context.Resolve<ExportService>();
-        _cellSelectionService = context.Resolve<CellSelectionService>();
-        _sortingEnhancementsService = context.Resolve<SortingEnhancementsService>();
-        _sideBarService = context.Resolve<SideBarService>();
-        _filterService = context.Resolve<IFilterService>();
-        _aggregationService = context.Resolve<IAggregationService>();
-        _groupingService = context.Resolve<IGroupingService>();
-        _statusBarService = context.Resolve<StatusBarService>();
-        _eventService = context.TryResolve<IEventService>(out var eventService) ? eventService : new EventService();
-        _chartIntegrationService = context.Resolve<IChartIntegrationService>();
-        _exportCoordinator = context.Resolve<IExportCoordinator>();
-
-        var editorRegistry = context.Resolve<ICellEditorRegistry>();
-        _cellEditorService = editorRegistry.GetOrCreate<TData>();
-        _batchEditManager = _cellEditorService.GetBatchManager(this);
-        _clientSideRowModel = new ClientSideRowModel<TData>(this);
-        _columnInteractiveService = new ColumnInteractiveService<TData>(this, _eventService);
-        if (_rowModelType == RowModelType.ServerSide)
-        {
-            _serverSideRowModel = new ServerSideRowModel<TData>(this, _serverSideBlockSize);
-            _serverSideRowModel.RowsChanged += OnServerRowsChanged;
-        }
-        else
-        {
-            _serverSideRowModel = null;
-        }
-        
-        _sideBarService.EnsureDefaultPanels(this);
-        if (_filterService is FilterService filterServiceImpl)
-        {
-            filterServiceImpl.EnsureFilterPanel(this, _sideBarService);
-        }
-        _statusBarService.EnsureDefaultWidgets(this);
-        _chartIntegrationService.AttachToGrid(this);
-        _exportCoordinator.AttachToGrid(this);
-        
-        if (_rowModelType == RowModelType.ClientSide)
-        {
-            _clientSideRowModel.Start();
-        }
-        
-        // Emit grid ready event
         _eventService.DispatchEvent(GridEventTypes.GridReady, new GridReadyEventArgs(this));
     }
 
     // Advanced filtering capabilities
     public void SetGlobalFilter(object? value)
     {
-        GlobalFilterExtensions.SetGlobalFilter(this, value);
+        Table.SetGlobalFilter(value);
         ScheduleUIUpdate();
     }
 
     public object? GetGlobalFilterValue()
     {
-        return GlobalFilterExtensions.GetGlobalFilterValue(this);
+        return Table.GetGlobalFilterValue();
     }
 
     public void ClearGlobalFilter()
     {
-        GlobalFilterExtensions.ClearGlobalFilter(this);
+        Table.ClearGlobalFilter();
         // When filters change, reset to first page to avoid empty views
         if (State.Pagination != null)
         {
-            base.SetPageIndex(0);
+            Table.SetPageIndex(0);
         }
         ScheduleUIUpdate();
     }
@@ -325,29 +343,29 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     }
 
     // Advanced column operations
-    public new void SetColumnVisibility(string columnId, bool visible)
+    public void SetColumnVisibility(string columnId, bool visible)
     {
-        base.SetColumnVisibility(columnId, visible);
+        Table.SetColumnVisibility(columnId, visible);
         ScheduleUIUpdate();
     }
 
-    public new bool GetColumnVisibility(string columnId)
+    public bool GetColumnVisibility(string columnId)
     {
         var visibility = State.ColumnVisibility;
         return visibility?.Items.GetValueOrDefault(columnId, true) ?? true;
     }
 
-    public new int GetVisibleColumnCount()
+    public int GetVisibleColumnCount()
     {
         return VisibleLeafColumns.Count;
     }
 
-    public new int GetTotalColumnCount()
+    public int GetTotalColumnCount()
     {
         return AllLeafColumns.Count;
     }
 
-    public new int GetHiddenColumnCount()
+    public int GetHiddenColumnCount()
     {
         return GetTotalColumnCount() - GetVisibleColumnCount();
     }
@@ -532,21 +550,21 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     }
 
     // Sorting wrappers to trigger UI updates
-    public new void SetSorting(IEnumerable<ColumnSort> sorts)
+    public void SetSorting(IEnumerable<ColumnSort> sorts)
     {
-        base.SetSorting(sorts);
+        Table.SetSorting(sorts);
         RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Sort));
     }
 
-    public new void ToggleSort(string columnId)
+    public void ToggleSort(string columnId)
     {
-        base.ToggleSort(columnId);
+        Table.ToggleSort(columnId);
         RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Sort));
     }
 
-    public new void SetSorting(string columnId, SortDirection direction)
+    public void SetSorting(string columnId, SortDirection direction)
     {
-        base.SetSorting(columnId, direction);
+        Table.SetSorting(columnId, direction);
         RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Sort));
     }
 
@@ -658,7 +676,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
 
         if (State.Pagination != null)
         {
-            base.SetPageIndex(0);
+            Table.SetPageIndex(0);
         }
 
         if (value is not SetFilterState && _filterService is FilterService filterServiceImpl)
@@ -687,7 +705,7 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
 
         if (State.Pagination != null)
         {
-            base.SetPageIndex(0);
+            Table.SetPageIndex(0);
         }
 
         if (_filterService is FilterService filterServiceImpl)
@@ -755,21 +773,21 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
     }
 
     // Pagination wrappers to ensure UI updates
-    public new void SetPageIndex(int pageIndex)
+    public void SetPageIndex(int pageIndex)
     {
-        base.SetPageIndex(pageIndex);
+        Table.SetPageIndex(pageIndex);
         ScheduleUIUpdate();
     }
 
-    public new void SetPageSize(int pageSize)
+    public void SetPageSize(int pageSize)
     {
-        base.SetPageSize(pageSize);
+        Table.SetPageSize(pageSize);
         ScheduleUIUpdate();
     }
 
-    public new void NextPage()
+    public void NextPage()
     {
-        base.NextPage();
+        Table.NextPage();
         ScheduleUIUpdate();
     }
 
@@ -785,9 +803,9 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         }
     }
 
-    public new void PreviousPage()
+    public void PreviousPage()
     {
-        base.PreviousPage();
+        Table.PreviousPage();
         NotifyUIUpdate();
     }
 
@@ -1198,7 +1216,30 @@ public class SaGrid<TData> : Table<TData>, ISaGrid<TData>
         return _columnInteractiveService.SetColumnPinned(columnId, pinnedArea);
     }
 
+    Task ISaGridComponentHost<TData>.EnsureDataRangeAsync(int startRow, int endRow, CancellationToken cancellationToken)
+    {
+        return EnsureDataRangeAsync(startRow, endRow, cancellationToken);
+    }
 
+    int ISaGridComponentHost<TData>.GetPreferredFetchSize()
+    {
+        return GetPreferredFetchSize();
+    }
+
+    Row<TData>? ISaGridComponentHost<TData>.TryGetDisplayedRow(int index)
+    {
+        return TryGetDisplayedRow(index);
+    }
+
+    RowModelType ISaGridComponentHost<TData>.GetActiveRowModelType()
+    {
+        return GetActiveRowModelType();
+    }
+
+    bool ISaGridComponentHost<TData>.IsSameGrid(object gridInstance)
+    {
+        return ReferenceEquals(this, gridInstance);
+    }
 }
 
 // Factory methods for SaGrid.Advanced

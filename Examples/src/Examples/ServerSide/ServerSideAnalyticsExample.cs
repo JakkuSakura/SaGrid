@@ -92,7 +92,7 @@ internal sealed class ServerSideAnalyticsExample : IExample
         var statusBarHost = new StatusBarHost();
         statusBarHost.Initialize(grid.GetStatusBarService(), grid);
 
-        var gridComponent = new SaGridComponent<Person>(grid);
+        var gridComponent = grid.Component;
 
         var tableArea = new Grid
         {

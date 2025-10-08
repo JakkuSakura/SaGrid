@@ -250,7 +250,7 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
             foreach (var data in result.Rows)
             {
                 var id = $"server_{rowIndex}";
-                var row = new Row<TData>(_grid, id, rowIndex, data, 0, null);
+                var row = new Row<TData>(_grid.InnerTable, id, rowIndex, data, 0, null);
                 _rowCache[rowIndex] = row;
                 _maxLoadedRowIndex = Math.Max(_maxLoadedRowIndex, rowIndex);
                 rowIndex++;
@@ -300,4 +300,3 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
         RowsChanged?.Invoke(this, EventArgs.Empty);
     }
 }
-

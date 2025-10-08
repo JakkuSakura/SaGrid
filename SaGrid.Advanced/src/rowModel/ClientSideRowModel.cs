@@ -26,10 +26,10 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
     private List<Row<TData>> _groupFlatRows = new();
     private List<Row<TData>> _finalRows = new();
 
-    public ClientSideRowModel(SaGrid<TData> grid)
+    public ClientSideRowModel(SaGrid<TData> grid, Table<TData> table)
     {
         _grid = grid ?? throw new ArgumentNullException(nameof(grid));
-        _table = grid;
+        _table = table ?? throw new ArgumentNullException(nameof(table));
         _aggregationService = grid.GetAggregationService();
     }
 
