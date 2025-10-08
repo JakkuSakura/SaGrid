@@ -89,16 +89,8 @@ public class TableHeaderRenderer<TData>
         };
 
         var headerGrid = new Grid();
-        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Star });
 
         var hasResizer = ShouldRenderResizer(column);
-        if (hasResizer)
-        {
-            headerGrid.ColumnDefinitions.Add(new ColumnDefinition
-            {
-                Width = new GridLength(ResizeHandleWidth, GridUnitType.Pixel)
-            });
-        }
 
         var contentHost = new Border
         {
@@ -111,13 +103,11 @@ public class TableHeaderRenderer<TData>
         var content = CreateHeaderContent(column, header, out var sortIndicator);
         contentHost.Child = content;
 
-        Grid.SetColumn(contentHost, 0);
         headerGrid.Children.Add(contentHost);
 
         if (hasResizer)
         {
             var resizer = CreateResizeThumb(column);
-            Grid.SetColumn(resizer, 1);
             headerGrid.Children.Add(resizer);
         }
 
@@ -263,19 +253,21 @@ public class TableHeaderRenderer<TData>
             Width = ResizeHandleWidth,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Stretch,
+            Background = Brushes.Transparent,
             IsHitTestVisible = true
         };
 
-        resizerContainer.ZIndex = 1;
+        resizerContainer.SetValue(Panel.ZIndexProperty, 1);
 
         resizerContainer.Children.Add(new Border
         {
             Width = 1,
             Background = Brushes.LightGray,
-            HorizontalAlignment = HorizontalAlignment.Left,
+            HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Stretch
         });
 
+        thumb.SetValue(Panel.ZIndexProperty, 1);
         resizerContainer.Children.Add(thumb);
 
         return resizerContainer;
