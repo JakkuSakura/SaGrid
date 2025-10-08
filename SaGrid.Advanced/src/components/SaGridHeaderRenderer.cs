@@ -59,7 +59,7 @@ internal class SaGridHeaderRenderer<TData>
 
         var headerControls = new List<Control>();
 
-        if (host.Options.EnableGrouping || host.GetGroupedColumnIds().Count > 0)
+        if (table.Options.EnableGrouping || host.GetGroupedColumnIds().Count > 0)
         {
             var groupingArea = CreateGroupingArea(host);
             if (groupingArea != null)
@@ -68,7 +68,7 @@ internal class SaGridHeaderRenderer<TData>
             }
         }
 
-        foreach (var headerGroup in host.HeaderGroups)
+        foreach (var headerGroup in table.HeaderGroups)
         {
             var headerRow = new StackPanel
             {
@@ -78,7 +78,7 @@ internal class SaGridHeaderRenderer<TData>
             foreach (var header in headerGroup.Headers)
             {
                 var column = (Column<TData>)header.Column;
-                var headerCell = CreateHeaderCell(host, column, header);
+                var headerCell = CreateHeaderCell(host, table, column, header);
                 headerRow.Children.Add(headerCell);
             }
 
@@ -92,9 +92,9 @@ internal class SaGridHeaderRenderer<TData>
             headerControls.Add(headerRow);
         }
 
-        if (host.Options.EnableColumnFilters)
+        if (table.Options.EnableColumnFilters)
         {
-            headerControls.Add(CreateFilterRow(host));
+            headerControls.Add(CreateFilterRow(host, table));
         }
 
         return new StackPanel()
@@ -102,11 +102,11 @@ internal class SaGridHeaderRenderer<TData>
             .Children(headerControls.ToArray());
     }
 
-    private Control CreateHeaderCell(ISaGridComponentHost<TData> host, Column<TData> column, IHeader<TData> header)
+    private Control CreateHeaderCell(ISaGridComponentHost<TData> host, Table<TData> table, Column<TData> column, IHeader<TData> header)
     {
         return HasInteractivity
-            ? CreateInteractiveHeaderCell(host, column, header)
-            : CreateBasicHeaderCell(host, column, header);
+            ? CreateInteractiveHeaderCell(host, table, column, header)
+            : CreateBasicHeaderCell(host, table, column, header);
     }
 
     private Control? CreateGroupingArea(ISaGridComponentHost<TData> host)
@@ -229,7 +229,7 @@ internal class SaGridHeaderRenderer<TData>
         return chip;
     }
 
-    private Control CreateBasicHeaderCell(ISaGridComponentHost<TData> host, Column<TData> column, IHeader<TData> header)
+    private Control CreateBasicHeaderCell(ISaGridComponentHost<TData> host, Table<TData> table, Column<TData> column, IHeader<TData> header)
     {
         var border = new Border()
             .BorderThickness(0, 0, 1, 1)
@@ -241,12 +241,12 @@ internal class SaGridHeaderRenderer<TData>
             .HorizontalAlignment(HorizontalAlignment.Stretch)
             .VerticalAlignment(VerticalAlignment.Stretch);
 
-        border.Child = CreateMainHeaderButton(host, column, header);
+        border.Child = CreateMainHeaderButton(host, table, column, header);
 
         return border;
     }
 
-    private Control CreateInteractiveHeaderCell(ISaGridComponentHost<TData> host, Column<TData> column, IHeader<TData> header)
+    private Control CreateInteractiveHeaderCell(ISaGridComponentHost<TData> host, Table<TData> table, Column<TData> column, IHeader<TData> header)
     {
         var border = new Border()
             .BorderThickness(0, 0, 1, 1)
@@ -262,7 +262,7 @@ internal class SaGridHeaderRenderer<TData>
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(20)));
 
-        var mainButton = CreateMainHeaderButton(host, column, header);
+        var mainButton = CreateMainHeaderButton(host, table, column, header);
         Grid.SetColumn(mainButton, 0);
         headerGrid.Children.Add(mainButton);
 
@@ -272,7 +272,7 @@ internal class SaGridHeaderRenderer<TData>
             _dragDropManager.RegisterDragSource(dragSource);
             _activeDragSources.Add(dragSource);
 
-            var resizeHandle = CreateResizeHandle(host, column, header);
+            var resizeHandle = CreateResizeHandle(table, column, header);
             Grid.SetColumn(resizeHandle, 1);
             headerGrid.Children.Add(resizeHandle);
         }
@@ -281,7 +281,7 @@ internal class SaGridHeaderRenderer<TData>
         return border;
     }
 
-    private Button CreateMainHeaderButton(ISaGridComponentHost<TData> host, Column<TData> column, IHeader<TData> header)
+    private Button CreateMainHeaderButton(ISaGridComponentHost<TData> host, Table<TData> table, Column<TData> column, IHeader<TData> header)
     {
         var button = new Button
         {
@@ -296,14 +296,14 @@ internal class SaGridHeaderRenderer<TData>
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
             Cursor = new Cursor(StandardCursorType.Hand),
-            Content = CreateHeaderLabel(host, column, header)
+            Content = CreateHeaderLabel(table, column, header)
         };
 
-        SetupSortingBehavior(button, host, column);
+        SetupSortingBehavior(button, host, table, column);
         return button;
     }
 
-    private Control CreateResizeHandle(ISaGridComponentHost<TData> host, Column<TData> column, IHeader<TData> header)
+    private Control CreateResizeHandle(Table<TData> table, Column<TData> column, IHeader<TData> header)
     {
         var resizeHandle = new Border()
             .Width(4)
@@ -334,7 +334,7 @@ internal class SaGridHeaderRenderer<TData>
                 dragStartX = point.Position.X;
                 startWidth = header.Size;
                 isResizing = true;
-                neighbourColumn = host.VisibleLeafColumns
+                neighbourColumn = table.VisibleLeafColumns
                     .SkipWhile(c => c.Id != column.Id)
                     .Skip(1)
                     .Cast<Column<TData>?>()
@@ -398,14 +398,14 @@ internal class SaGridHeaderRenderer<TData>
         return resizeHandle;
     }
 
-    private void SetupSortingBehavior(Button button, ISaGridComponentHost<TData> host, Column<TData> column)
+    private void SetupSortingBehavior(Button button, ISaGridComponentHost<TData> host, Table<TData> table, Column<TData> column)
     {
         void ApplySorting(bool multi)
         {
             if (multi && host.IsMultiSortEnabled())
             {
                 var currentDir = column.SortDirection;
-                var current = host.State.Sorting?.Columns ?? new List<ColumnSort>();
+                var current = table.State.Sorting?.Columns ?? new List<ColumnSort>();
 
                 if (currentDir == null)
                 {
@@ -473,11 +473,11 @@ internal class SaGridHeaderRenderer<TData>
         button.Click += (_, _) => ApplySorting(false);
     }
 
-    private Control CreateFilterRow(ISaGridComponentHost<TData> host)
+    private Control CreateFilterRow(ISaGridComponentHost<TData> host, Table<TData> table)
     {
-        var filterControls = host.VisibleLeafColumns.Select(column =>
+        var filterControls = table.VisibleLeafColumns.Select(column =>
         {
-            var textBox = CreateFilterTextBox(host, column);
+            var textBox = CreateFilterTextBox(host, table, column);
             return new Border()
                 .BorderThickness(0, 0, 1, 1)
                 .BorderBrush(Brushes.LightGray)
@@ -498,7 +498,7 @@ internal class SaGridHeaderRenderer<TData>
             );
     }
 
-    private TextBox CreateFilterTextBox(ISaGridComponentHost<TData> host, Column<TData> column)
+    private TextBox CreateFilterTextBox(ISaGridComponentHost<TData> host, Table<TData> table, Column<TData> column)
     {
         var textBox = new TextBox
         {
@@ -543,7 +543,7 @@ internal class SaGridHeaderRenderer<TData>
             if (sender is TextBox tb)
             {
                 var newValue = string.IsNullOrWhiteSpace(tb.Text) ? (object?)null : tb.Text;
-                var currentValue = host.State.ColumnFilters?.Filters
+                var currentValue = table.State.ColumnFilters?.Filters
                     .FirstOrDefault(f => f.Id == column.Id)?.Value;
 
                 var equals = (currentValue == null && newValue == null) ||
@@ -557,7 +557,7 @@ internal class SaGridHeaderRenderer<TData>
             }
         };
 
-        var currentFilterValue = host.State.ColumnFilters?.Filters.FirstOrDefault(f => f.Id == column.Id)?.Value;
+        var currentFilterValue = table.State.ColumnFilters?.Filters.FirstOrDefault(f => f.Id == column.Id)?.Value;
         if (currentFilterValue is string textValue)
         {
             if (!string.Equals(textBox.Text, textValue, StringComparison.Ordinal))
@@ -573,7 +573,7 @@ internal class SaGridHeaderRenderer<TData>
         return textBox;
     }
 
-    private Control CreateHeaderLabel(ISaGridComponentHost<TData> host, Column<TData> column, IHeader<TData> header)
+    private Control CreateHeaderLabel(Table<TData> table, Column<TData> column, IHeader<TData> header)
     {
         var title = SaGridContentHelper<TData>.GetHeaderContent(header);
         var sortSuffix = string.Empty;
@@ -581,7 +581,7 @@ internal class SaGridHeaderRenderer<TData>
         if (column.SortDirection != null)
         {
             var arrow = column.SortDirection == SortDirection.Ascending ? "▲" : "▼";
-            var isMulti = host.IsMultiSortEnabled();
+            var isMulti = table.State.Sorting?.Columns.Count > 1;
             var index = (isMulti && column.SortIndex.HasValue)
                 ? $" {column.SortIndex.Value + 1}"
                 : string.Empty;

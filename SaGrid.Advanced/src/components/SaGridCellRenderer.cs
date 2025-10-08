@@ -24,9 +24,9 @@ internal interface IReusableCellVisual<TData>
 
 internal class SaGridCellRenderer<TData>
 {
-    public Control CreateCell(ISaGridComponentHost<TData> host, Row<TData> row, Column<TData> column, int displayIndex)
+    public Control CreateCell(ISaGridComponentHost<TData> host, Table<TData> table, Row<TData> row, Column<TData> column, int displayIndex)
     {
-        var firstColumnId = host.VisibleLeafColumns.FirstOrDefault()?.Id;
+        var firstColumnId = table.VisibleLeafColumns.FirstOrDefault()?.Id;
         var indent = column.Id == firstColumnId ? row.Depth * 16 : 0;
 
         var displayFactory = new Func<Control>(() => new TextBlock()
@@ -48,6 +48,7 @@ internal class SaGridCellRenderer<TData>
 
     public Control CreateReactiveCell(
         ISaGridComponentHost<TData> host,
+        Table<TData> table,
         Row<TData> row,
         Column<TData> column,
         int displayIndex,
@@ -55,7 +56,7 @@ internal class SaGridCellRenderer<TData>
         Func<int>? selectionSignalGetter = null)
     {
         var hostSignal = hostSignalGetter ?? (() => host);
-        return new ReactiveCellComponent<TData>(host, row, column, displayIndex, hostSignal, selectionSignalGetter, this);
+        return new ReactiveCellComponent<TData>(host, table, row, column, displayIndex, hostSignal, selectionSignalGetter, this);
     }
 
     internal IBrush GetCellBackground(bool isSelected, bool isActiveCell, int rowIndex)
@@ -85,6 +86,7 @@ internal sealed class ReactiveCellComponent<TData> : Component, IReusableCellVis
     private readonly Func<ISaGridComponentHost<TData>> _hostSignalGetter;
     private readonly Func<int>? _selectionSignalGetter;
     private readonly SaGridCellRenderer<TData> _renderer;
+    private readonly Table<TData> _table;
 
     private Border? _border;
     private EditingCellPresenter<TData>? _presenter;
@@ -92,6 +94,7 @@ internal sealed class ReactiveCellComponent<TData> : Component, IReusableCellVis
 
     public ReactiveCellComponent(
         ISaGridComponentHost<TData> host,
+        Table<TData> table,
         Row<TData> row,
         Column<TData> column,
         int displayIndex,
@@ -100,6 +103,7 @@ internal sealed class ReactiveCellComponent<TData> : Component, IReusableCellVis
         SaGridCellRenderer<TData> renderer) : base(true)
     {
         _host = host;
+        _table = table;
         _row = row;
         _column = column;
         _displayIndex = displayIndex;
@@ -157,7 +161,7 @@ internal sealed class ReactiveCellComponent<TData> : Component, IReusableCellVis
         var activeCell = currentHost?.GetActiveCell();
         var isActiveCell = activeCell?.RowIndex == _displayIndex && activeCell?.ColumnId == _column.Id;
 
-        var firstColumnId = currentHost?.VisibleLeafColumns.FirstOrDefault()?.Id;
+        var firstColumnId = _table.VisibleLeafColumns.FirstOrDefault()?.Id;
         _indent = _column.Id == firstColumnId ? _row.Depth * 16 : 0;
 
         _border.Background = _renderer.GetCellBackground(isSelected, isActiveCell, _displayIndex);

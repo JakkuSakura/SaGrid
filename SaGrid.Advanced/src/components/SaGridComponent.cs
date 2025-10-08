@@ -11,7 +11,6 @@ using Avalonia.Markup.Declarative;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using SaGrid.Advanced.components;
 using SaGrid.Advanced.Components;
 using SaGrid.Advanced.DragDrop;
 using SaGrid.Core;
@@ -27,6 +26,7 @@ namespace SaGrid;
 public class SaGridComponent<TData> : SolidTable<TData>
 {
     private readonly ISaGridComponentHost<TData> _host;
+    private readonly TableOptions<TData> _options;
     private (Func<int>, Action<int>)? _selectionSignal;
     private Grid? _rootGrid;
     private Border? _rootBorder;
@@ -52,10 +52,135 @@ public class SaGridComponent<TData> : SolidTable<TData>
     private (Func<Table<TData>> Getter, Action<Table<TData>> Setter) TableSignalValue =>
         TableSignal ?? throw new InvalidOperationException("Table signal not initialized.");
 
-    internal SaGridComponent(ISaGridComponentHost<TData> host, Table<TData> table)
-        : base(host.Options, table)
+    #region Table facade
+
+    internal TableOptions<TData> GetOptions() => _options;
+
+    internal TableState<TData> GetState() => Table.State;
+
+    internal IReadOnlyList<Column<TData>> GetAllColumns() => Table.AllColumns;
+
+    internal IReadOnlyList<Column<TData>> GetAllLeafColumns() => Table.AllLeafColumns;
+
+    internal IReadOnlyList<Column<TData>> GetVisibleLeafColumns() => Table.VisibleLeafColumns;
+
+    internal IReadOnlyList<HeaderGroup<TData>> GetHeaderGroups() => Table.HeaderGroups;
+
+    internal IReadOnlyList<HeaderGroup<TData>> GetFooterGroups() => Table.FooterGroups;
+
+    internal RowModel<TData> GetRowModel() => Table.RowModel;
+
+    internal RowModel<TData> GetPreFilteredRowModel() => Table.PreFilteredRowModel;
+
+    internal RowModel<TData> GetPreSortedRowModel() => Table.PreSortedRowModel;
+
+    internal RowModel<TData> GetPreGroupedRowModel() => Table.PreGroupedRowModel;
+
+    internal RowModel<TData> GetPreExpandedRowModel() => Table.PreExpandedRowModel;
+
+    internal RowModel<TData> GetPrePaginationRowModel() => Table.PrePaginationRowModel;
+
+    internal void ApplyState(TableState<TData> state, bool updateRowModel) => Table.SetState(state, updateRowModel);
+
+    internal void ApplyState(Updater<TableState<TData>> updater, bool updateRowModel) => Table.SetState(updater, updateRowModel);
+
+    internal Column<TData>? FindColumn(string columnId) => Table.GetColumn(columnId);
+
+    internal Row<TData>? FindRow(string rowId) => Table.GetRow(rowId);
+
+    internal IReadOnlyList<Row<TData>> GetSelectedRows() => Table.GetSelectedRowModel();
+
+    internal void ResetColumnFilters() => Table.ResetColumnFilters();
+
+    internal void ResetGlobalFilter() => Table.ResetGlobalFilter();
+
+    internal void ResetSorting() => Table.ResetSorting();
+
+    internal void ResetRowSelection() => Table.ResetRowSelection();
+
+    internal void ResetColumnOrder() => Table.ResetColumnOrder();
+
+    internal void ResetColumnSizing() => Table.ResetColumnSizing();
+
+    internal void ResetColumnVisibility() => Table.ResetColumnVisibility();
+
+    internal void ResetExpanded() => Table.ResetExpanded();
+
+    internal void ResetGrouping() => Table.ResetGrouping();
+
+    internal void ResetPagination() => Table.ResetPagination();
+
+    internal int GetPageCount() => Table.GetPageCount();
+
+    internal bool CanGoPreviousPage() => Table.GetCanPreviousPage();
+
+    internal bool CanGoNextPage() => Table.GetCanNextPage();
+
+    internal void GoToFirstPage() => Table.FirstPage();
+
+    internal void GoToLastPage() => Table.LastPage();
+
+    internal bool AreAllRowsSelected() => Table.GetIsAllRowsSelected();
+
+    internal bool AreSomeRowsSelected() => Table.GetIsSomeRowsSelected();
+
+    internal void SelectAllRows() => Table.SelectAllRows();
+
+    internal void DeselectAllRows() => Table.DeselectAllRows();
+
+    internal void ToggleAllRowsSelected() => Table.ToggleAllRowsSelected();
+
+    internal void SetRowSelection(string rowId, bool selected) => Table.SetRowSelection(rowId, selected);
+
+    internal void SelectRowRange(int startIndex, int endIndex) => Table.SelectRowRange(startIndex, endIndex);
+
+    internal int GetSelectedRowCount() => Table.GetSelectedRowCount();
+
+    internal int GetTotalRowCount() => Table.GetTotalRowCount();
+
+    internal void SetColumnVisibility(string columnId, bool visible) => Table.SetColumnVisibility(columnId, visible);
+
+    internal bool GetColumnVisibility(string columnId)
+    {
+        var visibility = Table.State.ColumnVisibility;
+        return visibility?.Items.GetValueOrDefault(columnId, true) ?? true;
+    }
+
+    internal int GetVisibleColumnCount() => Table.VisibleLeafColumns.Count;
+
+    internal int GetTotalColumnCount() => Table.AllLeafColumns.Count;
+
+    internal int GetHiddenColumnCount() => GetTotalColumnCount() - GetVisibleColumnCount();
+
+    internal void SetPageIndex(int pageIndex) => Table.SetPageIndex(pageIndex);
+
+    internal void SetPageSize(int pageSize) => Table.SetPageSize(pageSize);
+
+    internal void GoToNextPage() => Table.NextPage();
+
+    internal void GoToPreviousPage() => Table.PreviousPage();
+
+    internal void SetSorting(IEnumerable<ColumnSort> sorts) => Table.SetSorting(sorts);
+
+    internal void SetSorting(string columnId, SortDirection direction) => Table.SetSorting(columnId, direction);
+
+    internal void ToggleSort(string columnId) => Table.ToggleSort(columnId);
+
+    internal Table<TData> GetUnderlyingTable() => Table;
+
+    internal void SetGlobalFilterValue(object? value) => Table.SetGlobalFilter(value);
+
+    internal object? GetGlobalFilterValue() => Table.GetGlobalFilterValue();
+
+    internal void ClearGlobalFilterValue() => Table.ClearGlobalFilter();
+
+    #endregion
+
+    internal SaGridComponent(ISaGridComponentHost<TData> host, TableOptions<TData> options, Table<TData> table)
+        : base(options, table)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
+        _options = options;
 
         _headerRenderer = new SaGridHeaderRenderer<TData>(
             _ => { },
@@ -112,7 +237,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
                     return new StackPanel();
                 }
 
-                return _footerRenderer.CreateFooter(_host);
+                return _footerRenderer.CreateFooter(_host, Table);
             });
         }
 
@@ -208,12 +333,13 @@ public class SaGridComponent<TData> : SolidTable<TData>
 
     private string ComputeHeaderStructureVersion()
     {
+        var table = Table;
         var columnsSignature = string.Join(
             "|",
-            _host.VisibleLeafColumns.Select(c => $"{c.Id}:{c.Size}").ToArray());
+            table.VisibleLeafColumns.Select(c => $"{c.Id}:{c.Size}").ToArray());
 
-        var sortingSignature = _host.State.Sorting != null
-            ? string.Join("|", _host.State.Sorting.Columns.Select(c => $"{c.Id}:{c.Direction}").ToArray())
+        var sortingSignature = table.State.Sorting != null
+            ? string.Join("|", table.State.Sorting.Columns.Select(c => $"{c.Id}:{c.Direction}").ToArray())
             : string.Empty;
 
         var groupingSignature = string.Join("|", _host.GetGroupedColumnIds());
@@ -224,9 +350,10 @@ public class SaGridComponent<TData> : SolidTable<TData>
 
     private string ComputeBodyStructureVersion()
     {
+        var table = Table;
         var columnSignature = string.Join(
             "|",
-            _host.VisibleLeafColumns
+            table.VisibleLeafColumns
                 .Select(c => $"{c.Id}:{c.Size.ToString(CultureInfo.InvariantCulture)}:{c.PinnedPosition ?? "-"}")
                 .ToArray());
 
@@ -235,7 +362,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
 
     private string ComputeFilterVersion()
     {
-        var filters = _host.State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
+        var filters = Table.State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
         return string.Join("|", filters.OrderBy(f => f.Id).Select(f => $"{f.Id}:{f.Value}").ToArray());
     }
 
@@ -321,7 +448,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
 
     private string GetFilterText(string columnId)
     {
-        var filters = _host.State.ColumnFilters?.Filters;
+        var filters = Table.State.ColumnFilters?.Filters;
         var value = filters?.FirstOrDefault(f => f.Id == columnId)?.Value;
         return value?.ToString() ?? string.Empty;
     }

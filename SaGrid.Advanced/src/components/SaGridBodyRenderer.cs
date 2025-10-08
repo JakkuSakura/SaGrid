@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -8,7 +10,7 @@ using SaGrid.Advanced.Interfaces;
 using SaGrid.Core;
 using SaGrid.Core.Models;
 
-namespace SaGrid.Advanced.components;
+namespace SaGrid;
 
 internal interface ISelectionAwareRowsControl
 {
@@ -30,9 +32,8 @@ internal class SaGridBodyRenderer<TData>
         Func<ISaGridComponentHost<TData>>? hostSignalGetter = null,
         Func<int>? selectionSignalGetter = null)
     {
-        _ = table; // Table is currently unused but kept for future extensibility.
-        var initialRows = FlattenRows(host.RowModel.Rows).ToList();
-        return new VirtualizedRowsControl(host, initialRows, _cellRenderer, hostSignalGetter, selectionSignalGetter);
+        var initialRows = FlattenRows(table.RowModel.Rows).ToList();
+        return new VirtualizedRowsControl(host, table, initialRows, _cellRenderer, hostSignalGetter, selectionSignalGetter);
     }
 
     private static IEnumerable<Row<TData>> FlattenRows(IReadOnlyList<Row<TData>> rows)
@@ -70,15 +71,18 @@ internal class SaGridBodyRenderer<TData>
         private bool _hasRealRows;
         private int _lastKnownRowCount = -1;
         private readonly Dictionary<string, RowControlContainer> _rowControlsById = new();
+        private readonly Table<TData> _table;
 
         public VirtualizedRowsControl(
             ISaGridComponentHost<TData> host,
+            Table<TData> table,
             IReadOnlyList<Row<TData>> initialRows,
             SaGridCellRenderer<TData> cellRenderer,
             Func<ISaGridComponentHost<TData>>? hostSignalGetter,
             Func<int>? selectionSignalGetter)
         {
             _host = host;
+            _table = table;
             _initialRows = initialRows;
             _cellRenderer = cellRenderer;
             _hostSignalGetter = hostSignalGetter;
@@ -262,7 +266,7 @@ internal class SaGridBodyRenderer<TData>
                 return;
             }
 
-            var currentRowIds = _host.RowModel.FlatRows.Select(r => r.Id).ToHashSet();
+            var currentRowIds = _table.RowModel.FlatRows.Select(r => r.Id).ToHashSet();
             if (currentRowIds.Count == 0)
             {
                 return;
@@ -293,11 +297,11 @@ internal class SaGridBodyRenderer<TData>
             var cellVisuals = new List<IReusableCellVisual<TData>>();
             var cellVisualsByColumn = new Dictionary<string, IReusableCellVisual<TData>>();
 
-            foreach (var column in _host.VisibleLeafColumns)
+            foreach (var column in _table.VisibleLeafColumns)
             {
                 var control = _hostSignalGetter != null
-                    ? _cellRenderer.CreateReactiveCell(_host, row, column, displayIndex, _hostSignalGetter, _selectionSignalGetter)
-                    : _cellRenderer.CreateCell(_host, row, column, displayIndex);
+                    ? _cellRenderer.CreateReactiveCell(_host, _table, row, column, displayIndex, _hostSignalGetter, _selectionSignalGetter)
+                    : _cellRenderer.CreateCell(_host, _table, row, column, displayIndex);
 
                 if (control is IReusableCellVisual<TData> reusable)
                 {

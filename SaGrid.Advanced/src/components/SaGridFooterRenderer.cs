@@ -4,6 +4,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Markup.Declarative;
 using SaGrid.Advanced.Components;
+using SaGrid.Core.Models;
 using SolidAvalonia;
 using static SolidAvalonia.Solid;
 
@@ -11,9 +12,9 @@ namespace SaGrid;
 
 internal class SaGridFooterRenderer<TData>
 {
-    public Control CreateFooter(ISaGridComponentHost<TData> host)
+    public Control CreateFooter(ISaGridComponentHost<TData> host, Table<TData> table)
     {
-        if (!host.Options.EnablePagination)
+        if (!table.Options.EnablePagination)
         {
             return new StackPanel(); // Empty footer if pagination is disabled
         }
@@ -21,10 +22,10 @@ internal class SaGridFooterRenderer<TData>
         return (Control)Reactive(() =>
         {
             // Depend on grid reactive signal via visible row count
-            var pageIndex = host.State.Pagination?.PageIndex ?? 0;
-            var pageSize = host.State.Pagination?.PageSize ?? 10;
+            var pageIndex = table.State.Pagination?.PageIndex ?? 0;
+            var pageSize = table.State.Pagination?.PageSize ?? 10;
             // Use filtered total (PrePaginationRowModel) for page count consistency
-            var totalRows = host.PrePaginationRowModel.Rows.Count;
+            var totalRows = table.PrePaginationRowModel.Rows.Count;
             var totalPages = Math.Max(1, (int)Math.Ceiling((double)totalRows / pageSize));
             var currentPage = pageIndex + 1; // Convert to 1-based
 

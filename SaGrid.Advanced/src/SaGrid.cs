@@ -24,7 +24,6 @@ namespace SaGrid.Advanced;
 
 public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 {
-    private readonly Table<TData> _table;
     private readonly SaGridComponent<TData> _component;
     private string? _quickFilter;
     
@@ -52,61 +51,69 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 
     public event EventHandler? RowDataChanged;
 
-    private Table<TData> Table => _component?.Table ?? _table;
-
-    internal Table<TData> InnerTable => Table;
+    internal Table<TData> InnerTable => _component.GetUnderlyingTable();
     public SaGridComponent<TData> Component => _component;
 
-    public TableOptions<TData> Options => Table.Options;
-    public TableState<TData> State => Table.State;
-    public IReadOnlyList<Column<TData>> AllColumns => Table.AllColumns;
-    public IReadOnlyList<Column<TData>> AllLeafColumns => Table.AllLeafColumns;
-    public IReadOnlyList<Column<TData>> VisibleLeafColumns => Table.VisibleLeafColumns;
-    public IReadOnlyList<HeaderGroup<TData>> HeaderGroups => Table.HeaderGroups;
-    public IReadOnlyList<HeaderGroup<TData>> FooterGroups => Table.FooterGroups;
-    public RowModel<TData> RowModel => Table.RowModel;
-    public RowModel<TData> PreFilteredRowModel => Table.PreFilteredRowModel;
-    public RowModel<TData> PreSortedRowModel => Table.PreSortedRowModel;
-    public RowModel<TData> PreGroupedRowModel => Table.PreGroupedRowModel;
-    public RowModel<TData> PreExpandedRowModel => Table.PreExpandedRowModel;
-    public RowModel<TData> PrePaginationRowModel => Table.PrePaginationRowModel;
+    public TableOptions<TData> Options => _component.GetOptions();
+    public TableState<TData> State => _component.GetState();
+    public IReadOnlyList<Column<TData>> AllColumns => _component.GetAllColumns();
+    public IReadOnlyList<Column<TData>> AllLeafColumns => _component.GetAllLeafColumns();
+    public IReadOnlyList<Column<TData>> VisibleLeafColumns => _component.GetVisibleLeafColumns();
+    public IReadOnlyList<HeaderGroup<TData>> HeaderGroups => _component.GetHeaderGroups();
+    public IReadOnlyList<HeaderGroup<TData>> FooterGroups => _component.GetFooterGroups();
+    public RowModel<TData> RowModel => _component.GetRowModel();
+    public RowModel<TData> PreFilteredRowModel => _component.GetPreFilteredRowModel();
+    public RowModel<TData> PreSortedRowModel => _component.GetPreSortedRowModel();
+    public RowModel<TData> PreGroupedRowModel => _component.GetPreGroupedRowModel();
+    public RowModel<TData> PreExpandedRowModel => _component.GetPreExpandedRowModel();
+    public RowModel<TData> PrePaginationRowModel => _component.GetPrePaginationRowModel();
 
-    public void SetState(TableState<TData> state, bool updateRowModel = true) => Table.SetState(state, updateRowModel);
-    public void SetState(Updater<TableState<TData>> updater, bool updateRowModel = true) => Table.SetState(updater, updateRowModel);
-    public Column<TData>? GetColumn(string columnId) => Table.GetColumn(columnId);
-    public Row<TData>? GetRow(string rowId) => Table.GetRow(rowId);
-    public IReadOnlyList<Row<TData>> GetSelectedRowModel() => Table.GetSelectedRowModel();
-    public void ResetColumnFilters() { Table.ResetColumnFilters(); ScheduleUIUpdate(); }
-    public void ResetGlobalFilter() { Table.ResetGlobalFilter(); ScheduleUIUpdate(); }
-    public void ResetSorting() { Table.ResetSorting(); ScheduleUIUpdate(); }
-    public void ResetRowSelection() { Table.ResetRowSelection(); ScheduleUIUpdate(); }
-    public void ResetColumnOrder() { Table.ResetColumnOrder(); ScheduleUIUpdate(); }
-    public void ResetColumnSizing() { Table.ResetColumnSizing(); ScheduleUIUpdate(); }
-    public void ResetColumnVisibility() { Table.ResetColumnVisibility(); ScheduleUIUpdate(); }
-    public void ResetExpanded() { Table.ResetExpanded(); ScheduleUIUpdate(); }
-    public void ResetGrouping() { Table.ResetGrouping(); ScheduleUIUpdate(); }
-    public void ResetPagination() { Table.ResetPagination(); ScheduleUIUpdate(); }
-    public int GetPageCount() => Table.GetPageCount();
-    public bool GetCanPreviousPage() => Table.GetCanPreviousPage();
-    public bool GetCanNextPage() => Table.GetCanNextPage();
-    public void FirstPage() { Table.FirstPage(); ScheduleUIUpdate(); }
-    public void LastPage() { Table.LastPage(); ScheduleUIUpdate(); }
-    public bool GetIsAllRowsSelected() => Table.GetIsAllRowsSelected();
-    public bool GetIsSomeRowsSelected() => Table.GetIsSomeRowsSelected();
-    public void SelectAllRows() { Table.SelectAllRows(); ScheduleUIUpdate(); }
-    public void DeselectAllRows() { Table.DeselectAllRows(); ScheduleUIUpdate(); }
-    public void ToggleAllRowsSelected() { Table.ToggleAllRowsSelected(); ScheduleUIUpdate(); }
-    public void SetRowSelection(string rowId, bool selected) { Table.SetRowSelection(rowId, selected); ScheduleUIUpdate(); }
-    public void SelectRowRange(int startIndex, int endIndex) { Table.SelectRowRange(startIndex, endIndex); ScheduleUIUpdate(); }
-    public int GetSelectedRowCount() => Table.GetSelectedRowCount();
-    public int GetTotalRowCount() => Table.GetTotalRowCount();
+    public void SetState(TableState<TData> state, bool updateRowModel = true)
+    {
+        _component.ApplyState(state, updateRowModel);
+    }
+
+    public void SetState(Updater<TableState<TData>> updater, bool updateRowModel = true)
+    {
+        _component.ApplyState(updater, updateRowModel);
+    }
+
+    public Column<TData>? GetColumn(string columnId) => _component.FindColumn(columnId);
+
+    public Row<TData>? GetRow(string rowId) => _component.FindRow(rowId);
+
+    public IReadOnlyList<Row<TData>> GetSelectedRowModel() => _component.GetSelectedRows();
+
+    public void ResetColumnFilters() { _component.ResetColumnFilters(); ScheduleUIUpdate(); }
+    public void ResetGlobalFilter() { _component.ResetGlobalFilter(); ScheduleUIUpdate(); }
+    public void ResetSorting() { _component.ResetSorting(); ScheduleUIUpdate(); }
+    public void ResetRowSelection() { _component.ResetRowSelection(); ScheduleUIUpdate(); }
+    public void ResetColumnOrder() { _component.ResetColumnOrder(); ScheduleUIUpdate(); }
+    public void ResetColumnSizing() { _component.ResetColumnSizing(); ScheduleUIUpdate(); }
+    public void ResetColumnVisibility() { _component.ResetColumnVisibility(); ScheduleUIUpdate(); }
+    public void ResetExpanded() { _component.ResetExpanded(); ScheduleUIUpdate(); }
+    public void ResetGrouping() { _component.ResetGrouping(); ScheduleUIUpdate(); }
+    public void ResetPagination() { _component.ResetPagination(); ScheduleUIUpdate(); }
+    public int GetPageCount() => _component.GetPageCount();
+    public bool GetCanPreviousPage() => _component.CanGoPreviousPage();
+    public bool GetCanNextPage() => _component.CanGoNextPage();
+    public void FirstPage() { _component.GoToFirstPage(); ScheduleUIUpdate(); }
+    public void LastPage() { _component.GoToLastPage(); ScheduleUIUpdate(); }
+    public bool GetIsAllRowsSelected() => _component.AreAllRowsSelected();
+    public bool GetIsSomeRowsSelected() => _component.AreSomeRowsSelected();
+    public void SelectAllRows() { _component.SelectAllRows(); ScheduleUIUpdate(); }
+    public void DeselectAllRows() { _component.DeselectAllRows(); ScheduleUIUpdate(); }
+    public void ToggleAllRowsSelected() { _component.ToggleAllRowsSelected(); ScheduleUIUpdate(); }
+    public void SetRowSelection(string rowId, bool selected) { _component.SetRowSelection(rowId, selected); ScheduleUIUpdate(); }
+    public void SelectRowRange(int startIndex, int endIndex) { _component.SelectRowRange(startIndex, endIndex); ScheduleUIUpdate(); }
+    public int GetSelectedRowCount() => _component.GetSelectedRowCount();
+    public int GetTotalRowCount() => _component.GetTotalRowCount();
 
     public SaGrid(TableOptions<TData> options)
     {
         SaGridModules.EnsureInitialized();
         var table = new Table<TData>(options);
-        _table = table;
-        _component = new SaGridComponent<TData>(this, table);
+        _component = new SaGridComponent<TData>(this, options, table);
         Initialize(table, options);
     }
 
@@ -114,8 +121,7 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
     public SaGrid(Table<TData> table)
     {
         SaGridModules.EnsureInitialized();
-        _table = table;
-        _component = new SaGridComponent<TData>(this, table);
+        _component = new SaGridComponent<TData>(this, table.Options, table);
         Initialize(table, table.Options);
     }
 
@@ -171,22 +177,22 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
     // Advanced filtering capabilities
     public void SetGlobalFilter(object? value)
     {
-        Table.SetGlobalFilter(value);
+        _component.SetGlobalFilterValue(value);
         ScheduleUIUpdate();
     }
 
     public object? GetGlobalFilterValue()
     {
-        return Table.GetGlobalFilterValue();
+        return _component.GetGlobalFilterValue();
     }
 
     public void ClearGlobalFilter()
     {
-        Table.ClearGlobalFilter();
+        _component.ClearGlobalFilterValue();
         // When filters change, reset to first page to avoid empty views
         if (State.Pagination != null)
         {
-            Table.SetPageIndex(0);
+            _component.SetPageIndex(0);
         }
         ScheduleUIUpdate();
     }
@@ -345,29 +351,28 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
     // Advanced column operations
     public void SetColumnVisibility(string columnId, bool visible)
     {
-        Table.SetColumnVisibility(columnId, visible);
+        _component.SetColumnVisibility(columnId, visible);
         ScheduleUIUpdate();
     }
 
     public bool GetColumnVisibility(string columnId)
     {
-        var visibility = State.ColumnVisibility;
-        return visibility?.Items.GetValueOrDefault(columnId, true) ?? true;
+        return _component.GetColumnVisibility(columnId);
     }
 
     public int GetVisibleColumnCount()
     {
-        return VisibleLeafColumns.Count;
+        return _component.GetVisibleColumnCount();
     }
 
     public int GetTotalColumnCount()
     {
-        return AllLeafColumns.Count;
+        return _component.GetTotalColumnCount();
     }
 
     public int GetHiddenColumnCount()
     {
-        return GetTotalColumnCount() - GetVisibleColumnCount();
+        return _component.GetHiddenColumnCount();
     }
 
     // Side bar APIs
@@ -552,19 +557,19 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
     // Sorting wrappers to trigger UI updates
     public void SetSorting(IEnumerable<ColumnSort> sorts)
     {
-        Table.SetSorting(sorts);
+        _component.SetSorting(sorts);
         RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Sort));
     }
 
     public void ToggleSort(string columnId)
     {
-        Table.ToggleSort(columnId);
+        _component.ToggleSort(columnId);
         RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Sort));
     }
 
     public void SetSorting(string columnId, SortDirection direction)
     {
-        Table.SetSorting(columnId, direction);
+        _component.SetSorting(columnId, direction);
         RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Sort));
     }
 
@@ -676,7 +681,7 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 
         if (State.Pagination != null)
         {
-            Table.SetPageIndex(0);
+            _component.SetPageIndex(0);
         }
 
         if (value is not SetFilterState && _filterService is FilterService filterServiceImpl)
@@ -705,7 +710,7 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 
         if (State.Pagination != null)
         {
-            Table.SetPageIndex(0);
+            _component.SetPageIndex(0);
         }
 
         if (_filterService is FilterService filterServiceImpl)
@@ -775,19 +780,19 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
     // Pagination wrappers to ensure UI updates
     public void SetPageIndex(int pageIndex)
     {
-        Table.SetPageIndex(pageIndex);
+        _component.SetPageIndex(pageIndex);
         ScheduleUIUpdate();
     }
 
     public void SetPageSize(int pageSize)
     {
-        Table.SetPageSize(pageSize);
+        _component.SetPageSize(pageSize);
         ScheduleUIUpdate();
     }
 
     public void NextPage()
     {
-        Table.NextPage();
+        _component.GoToNextPage();
         ScheduleUIUpdate();
     }
 
@@ -805,7 +810,7 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 
     public void PreviousPage()
     {
-        Table.PreviousPage();
+        _component.GoToPreviousPage();
         NotifyUIUpdate();
     }
 

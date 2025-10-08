@@ -12,19 +12,11 @@ namespace SaGrid.Advanced.Components;
 
 internal interface ISaGridComponentHost<TData>
 {
-    TableOptions<TData> Options { get; }
-    TableState<TData> State { get; }
-    IReadOnlyList<Column<TData>> VisibleLeafColumns { get; }
-    IReadOnlyList<HeaderGroup<TData>> HeaderGroups { get; }
-    RowModel<TData> RowModel { get; }
-    RowModel<TData> PrePaginationRowModel { get; }
-    RowModelType GetActiveRowModelType();
-
     event EventHandler? RowDataChanged;
 
     void SetUIUpdateCallbacks(Action? gridCallback, Action<CellSelectionDelta?>? selectionCallback);
-    ColumnInteractiveService<TData> GetColumnInteractiveService();
     IEventService GetEventService();
+    ColumnInteractiveService<TData> GetColumnInteractiveService();
     IReadOnlyList<string> GetGroupedColumnIds();
     void RemoveGroupingColumn(string columnId);
     void AddGroupingColumn(string columnId, int? insertAtIndex = null);
@@ -41,6 +33,7 @@ internal interface ISaGridComponentHost<TData>
     int GetPreferredFetchSize();
     Row<TData>? TryGetDisplayedRow(int index);
     int GetApproximateRowCount();
+    RowModelType GetActiveRowModelType();
     void SelectCell(int rowIndex, string columnId, bool addToSelection);
     bool IsCellSelected(int rowIndex, string columnId);
     (int RowIndex, string ColumnId)? GetActiveCell();
