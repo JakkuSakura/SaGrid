@@ -105,8 +105,8 @@ public class ColumnInteractiveService<TData>
         var clamped = Math.Clamp(width, minWidth, maxWidth);
 
         var columnSizing = _table.State.ColumnSizing ?? new ColumnSizingState();
-        var currentWidth = columnSizing.GetValueOrDefault(columnId, column.ColumnDef.Size ?? minWidth);
-        if (Math.Abs(currentWidth - clamped) < 0.5)
+        var currentWidth = column.Size;
+        if (Math.Abs(currentWidth - clamped) < 0.01)
         {
             return false;
         }
@@ -483,7 +483,7 @@ public class ColumnInteractiveService<TData>
 
         var (primaryMin, primaryMax) = GetColumnMinMax(primary);
         var sizing = _table.State.ColumnSizing ?? new ColumnSizingState();
-        var primaryWidth = sizing.GetValueOrDefault(primaryColumnId, primary.ColumnDef.Size ?? primaryMin);
+        var primaryWidth = primary.Size;
 
         var desiredPrimary = Math.Clamp(primaryWidth + delta, primaryMin, primaryMax);
         var appliedDelta = desiredPrimary - primaryWidth;
@@ -499,12 +499,12 @@ public class ColumnInteractiveService<TData>
             }
 
             var (secondaryMin, secondaryMax) = GetColumnMinMax(secondary);
-            var secondaryWidth = sizing.GetValueOrDefault(secondaryColumnId!, secondary.ColumnDef.Size ?? secondaryMin);
+            var secondaryWidth = secondary.Size;
             var desiredSecondary = Math.Clamp(secondaryWidth - appliedDelta, secondaryMin, secondaryMax);
 
             // adjust delta if neighbour cannot shrink fully
             var neighbourDelta = secondaryWidth - desiredSecondary;
-            if (Math.Abs(neighbourDelta - appliedDelta) > 0.5)
+            if (Math.Abs(neighbourDelta - appliedDelta) > 0.01)
             {
                 appliedDelta = neighbourDelta;
                 desiredPrimary = Math.Clamp(primaryWidth + appliedDelta, primaryMin, primaryMax);
@@ -521,7 +521,7 @@ public class ColumnInteractiveService<TData>
             newSizing = sizing.With(primaryColumnId, desiredPrimary);
         }
 
-        if (Math.Abs(appliedDelta) < 0.25)
+        if (Math.Abs(appliedDelta) < 0.01)
         {
             return false;
         }
@@ -533,12 +533,13 @@ public class ColumnInteractiveService<TData>
 
     private (double Min, double Max) GetColumnMinMax(Column<TData> column)
     {
-        var min = column.ColumnDef.MinSize ?? 40;
-        var max = column.ColumnDef.MaxSize ?? Math.Max(min, 1000);
-        if (max < min)
-        {
-            max = min;
-        }
+        var min = column.ColumnDef.MinSize.HasValue
+            ? Math.Max(column.ColumnDef.MinSize.Value, 1)
+            : 40;
+
+        var max = column.ColumnDef.MaxSize.HasValue
+            ? Math.Max(column.ColumnDef.MaxSize.Value, min)
+            : double.PositiveInfinity;
 
         return (min, max);
     }

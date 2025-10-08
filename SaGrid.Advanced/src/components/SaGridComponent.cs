@@ -39,6 +39,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
     private string _headerStructureVersion = string.Empty;
     private string _filterVersion = string.Empty;
     private string _bodyStructureVersion = string.Empty;
+    private string _columnWidthVersion = string.Empty;
     private ISelectionAwareRowsControl? _virtualizedRowsControl;
     private bool _callbacksConnected;
     private int _selectionCounter;
@@ -314,6 +315,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
         var newStructureVersion = ComputeHeaderStructureVersion();
         var newFilterVersion = ComputeFilterVersion();
         var newBodyVersion = ComputeBodyStructureVersion();
+        var newWidthVersion = ComputeColumnWidthVersion();
 
         if (!string.Equals(newStructureVersion, _headerStructureVersion, StringComparison.Ordinal))
         {
@@ -331,6 +333,12 @@ public class SaGridComponent<TData> : SolidTable<TData>
         {
             EnsureBodyControl(force: true);
         }
+
+        if (!string.Equals(newWidthVersion, _columnWidthVersion, StringComparison.Ordinal))
+        {
+            _columnWidthVersion = newWidthVersion;
+            _layoutManager?.Refresh();
+        }
     }
 
     private string ComputeHeaderStructureVersion()
@@ -338,7 +346,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
         var table = Table;
         var columnsSignature = string.Join(
             "|",
-            table.VisibleLeafColumns.Select(c => $"{c.Id}:{c.Size}").ToArray());
+            table.VisibleLeafColumns.Select(c => c.Id).ToArray());
 
         var sortingSignature = table.State.Sorting != null
             ? string.Join("|", table.State.Sorting.Columns.Select(c => $"{c.Id}:{c.Direction}").ToArray())
@@ -356,10 +364,20 @@ public class SaGridComponent<TData> : SolidTable<TData>
         var columnSignature = string.Join(
             "|",
             table.VisibleLeafColumns
-                .Select(c => $"{c.Id}:{c.Size.ToString(CultureInfo.InvariantCulture)}:{c.PinnedPosition ?? "-"}")
+                .Select(c => $"{c.Id}:{c.PinnedPosition ?? "-"}")
                 .ToArray());
 
         return columnSignature;
+    }
+
+    private string ComputeColumnWidthVersion()
+    {
+        var table = Table;
+        return string.Join(
+            "|",
+            table.VisibleLeafColumns
+                .Select(c => $"{c.Id}:{c.Size.ToString(CultureInfo.InvariantCulture)}")
+                .ToArray());
     }
 
     private string ComputeFilterVersion()
@@ -409,6 +427,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
 
         _headerStructureVersion = ComputeHeaderStructureVersion();
         _filterVersion = ComputeFilterVersion();
+        _columnWidthVersion = ComputeColumnWidthVersion();
         RefreshFilterTextBoxes(force: true);
     }
 
@@ -451,6 +470,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
         var bodyControl = _bodyRenderer.CreateBody(_host, Table, _layoutManager, () => _host, _selectionSignal?.Item1);
         _virtualizedRowsControl = bodyControl as ISelectionAwareRowsControl;
         _bodyHost.Content = bodyControl;
+        _columnWidthVersion = ComputeColumnWidthVersion();
     }
 
     private string GetFilterText(string columnId)

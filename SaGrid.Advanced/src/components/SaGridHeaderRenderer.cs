@@ -323,8 +323,8 @@ internal class SaGridHeaderRenderer<TData>
             BorderBrush = null,
             BorderThickness = new Thickness(0),
             Padding = new Thickness(0),
-            HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            VerticalContentAlignment = VerticalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
             Focusable = false,
             IsTabStop = false,
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -670,7 +670,7 @@ internal class SaGridHeaderRenderer<TData>
         {
             Text = title + sortSuffix,
             VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalAlignment = HorizontalAlignment.Center,
             TextAlignment = TextAlignment.Center,
             Margin = new Thickness(0)
         };

@@ -27,7 +27,8 @@ internal sealed class BatchEditingExample : IExample
             EnableColumnFilters = true,
             EnableRowSelection = true,
             EnableCellSelection = true,
-            EnableGlobalFilter = false
+            EnableGlobalFilter = false,
+            EnableColumnResizing = true
         };
 
         var grid = new SaGrid<Person>(options);
