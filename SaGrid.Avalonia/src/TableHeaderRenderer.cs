@@ -88,9 +88,14 @@ public class TableHeaderRenderer<TData>
             VerticalAlignment = VerticalAlignment.Stretch
         };
 
-        var headerGrid = new Grid();
+        var headerDock = new DockPanel
+        {
+            LastChildFill = true
+        };
 
-        var hasResizer = ShouldRenderResizer(column);
+        var resizeRail = CreateResizeRail(table, column);
+        DockPanel.SetDock(resizeRail, Dock.Right);
+        headerDock.Children.Add(resizeRail);
 
         var contentHost = new Border
         {
@@ -103,15 +108,9 @@ public class TableHeaderRenderer<TData>
         var content = CreateHeaderContent(column, header, out var sortIndicator);
         contentHost.Child = content;
 
-        headerGrid.Children.Add(contentHost);
+        headerDock.Children.Add(contentHost);
 
-        if (hasResizer)
-        {
-            var resizer = CreateResizeThumb(column);
-            headerGrid.Children.Add(resizer);
-        }
-
-        border.Child = headerGrid;
+        border.Child = headerDock;
 
         AttachSortingInteraction(contentHost, table, column, sortIndicator);
 
@@ -202,13 +201,33 @@ public class TableHeaderRenderer<TData>
         }
     }
 
-    private static bool ShouldRenderResizer(Column<TData> column)
+    private Control CreateResizeRail(Table<TData> table, Column<TData> column)
     {
-        return !column.Columns.Any() && column.CanResize;
-    }
+        var rail = new Grid
+        {
+            Width = column.CanResize && !column.Columns.Any() ? ResizeHandleWidth : 1,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Background = Brushes.Transparent,
+            IsHitTestVisible = column.CanResize && !column.Columns.Any()
+        };
 
-    private Control CreateResizeThumb(Column<TData> column)
-    {
+        rail.SetValue(Panel.ZIndexProperty, 1);
+
+        var line = new Border
+        {
+            Width = 1,
+            Background = new SolidColorBrush(Colors.Gray),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Stretch
+        };
+        rail.Children.Add(line);
+
+        if (!(column.CanResize && !column.Columns.Any()))
+        {
+            return rail;
+        }
+
         var thumb = new Thumb
         {
             Cursor = new Cursor(StandardCursorType.SizeWestEast),
@@ -216,6 +235,15 @@ public class TableHeaderRenderer<TData>
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch
         };
+
+        thumb.SetValue(Panel.ZIndexProperty, 1);
+        rail.Children.Add(thumb);
+
+        void ResetLine() => line.Background = Brushes.LightGray;
+
+        thumb.PointerEntered += (_, _) => line.Background = new SolidColorBrush(Colors.DodgerBlue);
+        thumb.PointerExited += (_, _) => ResetLine();
+        thumb.PointerCaptureLost += (_, _) => ResetLine();
 
         thumb.DragDelta += (_, e) =>
         {
@@ -245,43 +273,11 @@ public class TableHeaderRenderer<TData>
         {
             column.ResetSize();
             _currentLayoutManager?.Refresh();
+            ResetLine();
             e.Handled = true;
         };
 
-        var resizerContainer = new Grid
-        {
-            Width = ResizeHandleWidth,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Stretch,
-            Background = Brushes.Transparent,
-            IsHitTestVisible = true
-        };
-
-        resizerContainer.SetValue(Panel.ZIndexProperty, 1);
-
-        var line = new Border
-        {
-            Width = 1,
-            Background = Brushes.LightGray,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Stretch
-        };
-        resizerContainer.Children.Add(line);
-
-        thumb.SetValue(Panel.ZIndexProperty, 1);
-        resizerContainer.Children.Add(thumb);
-
-        thumb.PointerEntered += (_, _) =>
-        {
-            line.Background = new SolidColorBrush(Colors.SteelBlue);
-        };
-
-        thumb.PointerExited += (_, _) =>
-        {
-            line.Background = Brushes.LightGray;
-        };
-
-        return resizerContainer;
+        return rail;
     }
 
     private void AttachSortingInteraction(

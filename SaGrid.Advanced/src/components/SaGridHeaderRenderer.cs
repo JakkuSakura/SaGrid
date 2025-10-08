@@ -261,16 +261,24 @@ internal class SaGridHeaderRenderer<TData>
     private Control CreateBasicHeaderCell(ISaGridComponentHost<TData> host, Table<TData> table, Column<TData> column, IHeader<TData> header)
     {
         var border = new Border()
-            .BorderThickness(0, 0, 1, 1)
+            .BorderThickness(0, 0, 0, 1)
             .BorderBrush(Brushes.LightGray)
             .Background(Brushes.LightBlue)
             .Padding(new Thickness(0))
-            .Width(header.Size)
-            .Height(40)
+            .Height(HeaderHeight)
             .HorizontalAlignment(HorizontalAlignment.Stretch)
             .VerticalAlignment(VerticalAlignment.Stretch);
 
-        border.Child = CreateMainHeaderButton(host, table, column, header);
+        var dock = new DockPanel { LastChildFill = true };
+
+        var resizeRail = CreateResizeRail(table, column, border, enableResize: false);
+        DockPanel.SetDock(resizeRail, Dock.Right);
+        dock.Children.Add(resizeRail);
+
+        var mainButton = CreateMainHeaderButton(host, table, column, header);
+        dock.Children.Add(mainButton);
+
+        border.Child = dock;
 
         return border;
     }
@@ -278,33 +286,32 @@ internal class SaGridHeaderRenderer<TData>
     private Control CreateInteractiveHeaderCell(ISaGridComponentHost<TData> host, Table<TData> table, Column<TData> column, IHeader<TData> header)
     {
         var border = new Border()
-            .BorderThickness(0, 0, 1, 1)
+            .BorderThickness(0, 0, 0, 1)
             .BorderBrush(Brushes.LightGray)
             .Background(Brushes.LightBlue)
             .Padding(new Thickness(0))
-            .Width(header.Size)
-            .Height(40)
+            .Height(HeaderHeight)
             .HorizontalAlignment(HorizontalAlignment.Stretch)
             .VerticalAlignment(VerticalAlignment.Stretch);
 
-        var headerGrid = new Grid();
+        var headerDock = new DockPanel { LastChildFill = true };
 
         var mainButton = CreateMainHeaderButton(host, table, column, header);
-        headerGrid.Children.Add(mainButton);
 
         if (_dragDropManager != null && _columnService != null)
         {
             var dragSource = new ColumnDragSource<TData>(column, mainButton, _columnService);
             _dragDropManager.RegisterDragSource(dragSource);
             _activeDragSources.Add(dragSource);
-
-            var resizeHandle = CreateResizeHandle(table, column, border);
-            resizeHandle.HorizontalAlignment = HorizontalAlignment.Right;
-            resizeHandle.VerticalAlignment = VerticalAlignment.Stretch;
-            headerGrid.Children.Add(resizeHandle);
         }
 
-        border.Child = headerGrid;
+        var resizeRail = CreateResizeRail(table, column, border, enableResize: _columnService != null);
+        DockPanel.SetDock(resizeRail, Dock.Right);
+        headerDock.Children.Add(resizeRail);
+
+        headerDock.Children.Add(mainButton);
+
+        border.Child = headerDock;
         return border;
     }
 
@@ -330,8 +337,36 @@ internal class SaGridHeaderRenderer<TData>
         return button;
     }
 
-    private Control CreateResizeHandle(Table<TData> table, Column<TData> column, Border headerBorder)
+    private Control CreateResizeRail(Table<TData> table, Column<TData> column, Border headerBorder, bool enableResize)
     {
+        var canResize = enableResize && column.CanResize && !column.Columns.Any();
+
+        var rail = new Grid
+        {
+            Width = canResize ? ResizeHandleWidth : 1,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Background = Brushes.Transparent,
+            IsHitTestVisible = canResize
+        };
+
+        rail.SetValue(Panel.ZIndexProperty, 1);
+
+        var line = new Border
+        {
+            Width = 1,
+            Background = new SolidColorBrush(Colors.Gray),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Stretch
+        };
+
+        rail.Children.Add(line);
+
+        if (!canResize || _columnService == null)
+        {
+            return rail;
+        }
+
         var thumb = new Thumb
         {
             Width = ResizeHandleWidth,
@@ -341,21 +376,28 @@ internal class SaGridHeaderRenderer<TData>
             HorizontalAlignment = HorizontalAlignment.Right
         };
 
+        thumb.SetValue(Panel.ZIndexProperty, 1);
+        rail.Children.Add(thumb);
+
         double startWidth = column.Size;
         double cumulativeDelta = 0;
         double appliedDelta = 0;
         bool isPairResize = false;
         Column<TData>? neighbourColumn = null;
 
-        thumb.PointerEntered += (_, _) =>
-        {
-            thumb.Background = new SolidColorBrush(Colors.Blue, 0.2);
-        };
-
-        thumb.PointerExited += (_, _) =>
+        void ResetLine()
         {
             thumb.Background = Brushes.Transparent;
+            line.Background = Brushes.LightGray;
+        }
+
+        thumb.PointerEntered += (_, _) =>
+        {
+            thumb.Background = new SolidColorBrush(Colors.SteelBlue, 0.2);
+            line.Background = new SolidColorBrush(Colors.DodgerBlue);
         };
+
+        thumb.PointerExited += (_, _) => ResetLine();
 
         thumb.PointerPressed += (_, e) =>
         {
@@ -384,12 +426,12 @@ internal class SaGridHeaderRenderer<TData>
 
             if (isPairResize && neighbourColumn != null)
             {
-                _columnService?.ResizeColumnPair(column.Id, neighbourColumn.Id, deltaIncrement);
+                _columnService.ResizeColumnPair(column.Id, neighbourColumn.Id, deltaIncrement);
             }
             else
             {
                 var newWidth = Math.Max(40, startWidth + cumulativeDelta);
-                _columnService?.SetColumnWidth(column.Id, newWidth);
+                _columnService.SetColumnWidth(column.Id, newWidth);
             }
 
             headerBorder.Width = column.Size;
@@ -411,21 +453,24 @@ internal class SaGridHeaderRenderer<TData>
         {
             ResetDrag();
             _layoutManager?.Refresh();
+            ResetLine();
         };
 
         thumb.PointerCaptureLost += (_, _) =>
         {
             ResetDrag();
+            ResetLine();
         };
 
         thumb.DoubleTapped += (_, _) =>
         {
-            _columnService?.AutoSizeColumn(column.Id);
+            _columnService.AutoSizeColumn(column.Id);
             headerBorder.Width = column.Size;
             _layoutManager?.Refresh();
+            ResetLine();
         };
 
-        return thumb;
+        return rail;
     }
 
     private void SetupSortingBehavior(Button button, ISaGridComponentHost<TData> host, Table<TData> table, Column<TData> column)
