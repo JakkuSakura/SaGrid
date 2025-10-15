@@ -271,7 +271,7 @@ internal class SaGridHeaderRenderer<TData>
 
         var dock = new DockPanel { LastChildFill = true };
 
-        var resizeRail = CreateResizeRail(table, column, border, enableResize: false);
+    var resizeRail = CreateResizeRail(table, column, border, enableResize: true);
         DockPanel.SetDock(resizeRail, Dock.Right);
         dock.Children.Add(resizeRail);
 
@@ -305,7 +305,7 @@ internal class SaGridHeaderRenderer<TData>
             _activeDragSources.Add(dragSource);
         }
 
-        var resizeRail = CreateResizeRail(table, column, border, enableResize: _columnService != null);
+    var resizeRail = CreateResizeRail(table, column, border, enableResize: true);
         DockPanel.SetDock(resizeRail, Dock.Right);
         headerDock.Children.Add(resizeRail);
 
@@ -339,7 +339,8 @@ internal class SaGridHeaderRenderer<TData>
 
     private Control CreateResizeRail(Table<TData> table, Column<TData> column, Border headerBorder, bool enableResize)
     {
-        var canResize = enableResize && column.CanResize && !column.Columns.Any();
+    var service = _columnService;
+    var canResize = enableResize && column.CanResize && !column.Columns.Any();
 
         var rail = new Grid
         {
@@ -347,7 +348,8 @@ internal class SaGridHeaderRenderer<TData>
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Stretch,
             Background = Brushes.Transparent,
-            IsHitTestVisible = canResize
+            IsHitTestVisible = canResize,
+            Cursor = canResize ? new Cursor(StandardCursorType.SizeWestEast) : new Cursor(StandardCursorType.Arrow)
         };
 
         rail.SetValue(Panel.ZIndexProperty, 1);
@@ -362,112 +364,144 @@ internal class SaGridHeaderRenderer<TData>
 
         rail.Children.Add(line);
 
-        if (!canResize || _columnService == null)
+        if (!canResize)
         {
             return rail;
         }
 
-        var thumb = new Thumb
-        {
-            Width = ResizeHandleWidth,
-            Background = Brushes.Transparent,
-            Cursor = new Cursor(StandardCursorType.SizeWestEast),
-            VerticalAlignment = VerticalAlignment.Stretch,
-            HorizontalAlignment = HorizontalAlignment.Right
-        };
-
-        thumb.SetValue(Panel.ZIndexProperty, 1);
-        rail.Children.Add(thumb);
-
-        double startWidth = column.Size;
-        double cumulativeDelta = 0;
-        double appliedDelta = 0;
-        bool isPairResize = false;
+    bool isDragging = false;
+    bool isPairResize = false;
+    double lastPointerX = 0;
+    double currentWidth = column.Size;
         Column<TData>? neighbourColumn = null;
 
         void ResetLine()
         {
-            thumb.Background = Brushes.Transparent;
             line.Background = Brushes.LightGray;
         }
 
-        thumb.PointerEntered += (_, _) =>
+        rail.PointerEntered += (_, _) =>
         {
-            thumb.Background = new SolidColorBrush(Colors.SteelBlue, 0.2);
             line.Background = new SolidColorBrush(Colors.DodgerBlue);
         };
 
-        thumb.PointerExited += (_, _) => ResetLine();
-
-        thumb.PointerPressed += (_, e) =>
+        rail.PointerExited += (_, _) =>
         {
-            if (e.GetCurrentPoint(thumb).Properties.IsLeftButtonPressed)
+            if (!isDragging)
             {
-                isPairResize = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+                ResetLine();
             }
         };
 
-        thumb.DragStarted += (_, _) =>
+        rail.PointerPressed += (_, e) =>
         {
-            startWidth = column.Size;
-            cumulativeDelta = 0;
-            appliedDelta = 0;
+            if (!e.GetCurrentPoint(rail).Properties.IsLeftButtonPressed)
+            {
+                return;
+            }
+
+            isDragging = true;
+            isPairResize = service != null && e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+            lastPointerX = e.GetPosition(rail).X;
+            currentWidth = column.Size;
             neighbourColumn = table.VisibleLeafColumns
                 .SkipWhile(c => c.Id != column.Id)
                 .Skip(1)
                 .OfType<Column<TData>>()
                 .FirstOrDefault();
+
+            e.Pointer.Capture(rail);
+            e.Handled = true;
         };
 
-        thumb.DragDelta += (_, e) =>
+        rail.PointerMoved += (_, e) =>
         {
-            cumulativeDelta += e.Vector.X;
-            var deltaIncrement = cumulativeDelta - appliedDelta;
-
-            if (isPairResize && neighbourColumn != null)
+            if (!isDragging)
             {
-                _columnService.ResizeColumnPair(column.Id, neighbourColumn.Id, deltaIncrement);
+                return;
+            }
+
+            var currentX = e.GetPosition(rail).X;
+            var delta = currentX - lastPointerX;
+            if (Math.Abs(delta) < 0.1)
+            {
+                return;
+            }
+
+            lastPointerX = currentX;
+
+            if (isPairResize && neighbourColumn != null && service != null)
+            {
+                service.ResizeColumnPair(column.Id, neighbourColumn.Id, delta);
             }
             else
             {
-                var newWidth = Math.Max(40, startWidth + cumulativeDelta);
-                _columnService.SetColumnWidth(column.Id, newWidth);
+                currentWidth = Math.Max(40, currentWidth + delta);
+                if (service != null)
+                {
+                    service.SetColumnWidth(column.Id, currentWidth);
+                }
+                else
+                {
+                    column.SetSize(currentWidth);
+                }
             }
 
-            headerBorder.Width = column.Size;
-            appliedDelta = cumulativeDelta;
             _layoutManager?.Refresh();
             e.Handled = true;
         };
 
-        void ResetDrag()
+        void EndDrag(PointerEventArgs e)
         {
-            cumulativeDelta = 0;
-            appliedDelta = 0;
+            if (!isDragging)
+            {
+                return;
+            }
+
+            isDragging = false;
             isPairResize = false;
             neighbourColumn = null;
-            headerBorder.Width = column.Size;
+            ResetLine();
+
+            if (e.Pointer.Captured == rail)
+            {
+                e.Pointer.Capture(null);
+            }
+
+            _layoutManager?.Refresh();
+            e.Handled = true;
         }
 
-        thumb.DragCompleted += (_, _) =>
+        rail.PointerReleased += (_, e) =>
         {
-            ResetDrag();
-            _layoutManager?.Refresh();
+            if (e.InitialPressMouseButton == MouseButton.Left)
+            {
+                EndDrag(e);
+            }
+        };
+
+        rail.PointerCaptureLost += (_, _) =>
+        {
+            isDragging = false;
+            isPairResize = false;
+            neighbourColumn = null;
             ResetLine();
         };
 
-        thumb.PointerCaptureLost += (_, _) =>
+        rail.DoubleTapped += (_, e) =>
         {
-            ResetDrag();
-            ResetLine();
-        };
+            if (service != null)
+            {
+                service.AutoSizeColumn(column.Id);
+            }
+            else
+            {
+                column.ResetSize();
+            }
 
-        thumb.DoubleTapped += (_, _) =>
-        {
-            _columnService.AutoSizeColumn(column.Id);
-            headerBorder.Width = column.Size;
             _layoutManager?.Refresh();
             ResetLine();
+            e.Handled = true;
         };
 
         return rail;

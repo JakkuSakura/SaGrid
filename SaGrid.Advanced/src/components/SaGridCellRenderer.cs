@@ -39,7 +39,6 @@ internal class SaGridCellRenderer<TData>
             .BorderThickness(0, 0, 1, 1)
             .BorderBrush(Brushes.LightGray)
             .Background(GetCellBackground(false, false, displayIndex))
-            .Width(column.Size)
             .Height(30);
 
         border.Child = new EditingCellPresenter<TData>(host, row, column, displayFactory);
@@ -121,7 +120,6 @@ internal sealed class ReactiveCellComponent<TData> : Component, IReusableCellVis
         _border = new Border()
             .BorderThickness(0, 0, 1, 1)
             .BorderBrush(Brushes.LightGray)
-            .Width(_column.Size)
             .Height(30);
 
         Func<Control> displayFactory = () => new TextBlock()
