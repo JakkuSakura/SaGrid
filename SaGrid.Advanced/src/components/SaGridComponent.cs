@@ -395,7 +395,8 @@ public class SaGridComponent<TData> : SolidTable<TData>
 
         EnsureDragDropInfrastructure();
 
-        _layoutManager = new TableColumnLayoutManager<TData>(Table);
+        _layoutManager ??= new TableColumnLayoutManager<TData>(Table);
+        _layoutManager.Refresh();
 
         var header = _headerRenderer.CreateHeader(
             _host,
