@@ -202,7 +202,29 @@ public class Column<TData> : IColumn<TData>
     private double GetSize()
     {
         var sizingState = _table.State.ColumnSizing;
-        return sizingState?.GetValueOrDefault(Id, ColumnDef.Size ?? 150) ?? 150;
+        if (sizingState != null && sizingState.Items.TryGetValue(Id, out var stored))
+        {
+            return ClampWidth(stored);
+        }
+
+        if (ColumnDef.Width.HasValue)
+        {
+            var definition = ColumnDef.Width.Value;
+            if (definition.Mode == ColumnWidthMode.Fixed)
+            {
+                return ClampWidth(definition.Value);
+            }
+
+            var fallback = ColumnDef.MinSize.HasValue ? Math.Max(ColumnDef.MinSize.Value, 1) : 150;
+            return ClampWidth(fallback);
+        }
+
+        if (ColumnDef.Size.HasValue)
+        {
+            return ClampWidth(ColumnDef.Size.Value);
+        }
+
+        return ClampWidth(150);
     }
 
     private bool GetIsPinned()
@@ -218,6 +240,31 @@ public class Column<TData> : IColumn<TData>
         if (pinningState?.Left?.Contains(Id) == true) return "left";
         if (pinningState?.Right?.Contains(Id) == true) return "right";
         return null;
+    }
+
+    private (double Min, double Max) GetWidthBounds()
+    {
+        var min = ColumnDef.MinSize.HasValue
+            ? Math.Max(ColumnDef.MinSize.Value, 1)
+            : 40;
+
+        var max = ColumnDef.MaxSize.HasValue
+            ? Math.Max(ColumnDef.MaxSize.Value, min)
+            : double.PositiveInfinity;
+
+        return (min, max);
+    }
+
+    private double ClampWidth(double width)
+    {
+        var (min, max) = GetWidthBounds();
+        var candidate = double.IsNaN(width) ? min : Math.Max(width, min);
+        if (!double.IsPositiveInfinity(max))
+        {
+            candidate = Math.Min(candidate, max);
+        }
+
+        return candidate;
     }
 
     public void ToggleSorting(SortDirection? direction = null)

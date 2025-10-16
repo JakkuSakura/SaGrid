@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq.Expressions;
 using SaGrid.Core.Models;
 
@@ -172,6 +173,81 @@ public record ColumnSizingState(Dictionary<string, double> Items = null!)
     public Dictionary<string, double> Items { get; init; } = Items ?? new();
 }
 
+public enum ColumnWidthMode
+{
+    Fixed,
+    Star
+}
+
+public readonly record struct ColumnWidthDefinition(ColumnWidthMode Mode, double Value)
+{
+    public static ColumnWidthDefinition Fixed(double width)
+    {
+        var clamped = double.IsNaN(width) || width < 0 ? 0 : width;
+        return new ColumnWidthDefinition(ColumnWidthMode.Fixed, clamped);
+    }
+
+    public static ColumnWidthDefinition Star(double weight)
+    {
+        var normalized = double.IsNaN(weight) || weight <= 0 ? 1 : weight;
+        return new ColumnWidthDefinition(ColumnWidthMode.Star, normalized);
+    }
+
+    public static bool TryParse(string text, out ColumnWidthDefinition definition)
+    {
+        definition = default;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var trimmed = text.Trim();
+        if (trimmed.EndsWith("*", StringComparison.Ordinal))
+        {
+            var weightPart = trimmed[..^1].Trim();
+            if (string.IsNullOrEmpty(weightPart))
+            {
+                definition = Star(1);
+                return true;
+            }
+
+            if (double.TryParse(weightPart, NumberStyles.Float, CultureInfo.InvariantCulture, out var weight))
+            {
+                definition = Star(weight);
+                return true;
+            }
+
+            return false;
+        }
+
+        if (double.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out var width))
+        {
+            definition = Fixed(width);
+            return true;
+        }
+
+        return false;
+    }
+
+    public static ColumnWidthDefinition Parse(string text)
+    {
+        if (TryParse(text, out var definition))
+        {
+            return definition;
+        }
+
+        throw new FormatException($"无法解析列宽表达式 \"{text}\"。");
+    }
+
+    public override string ToString()
+    {
+        return Mode == ColumnWidthMode.Star
+            ? $"{Value.ToString(CultureInfo.InvariantCulture)}*"
+            : Value.ToString(CultureInfo.InvariantCulture);
+    }
+}
+
 public record ColumnVisibilityState(Dictionary<string, bool> Items = null!)
 {
     public Dictionary<string, bool> Items { get; init; } = Items ?? new();
@@ -203,6 +279,7 @@ public abstract record ColumnDef<TData>
     public int? Size { get; init; }
     public int? MinSize { get; init; }
     public int? MaxSize { get; init; }
+    public ColumnWidthDefinition? Width { get; init; }
     public Dictionary<string, object>? Meta { get; init; }
 }
 
