@@ -27,14 +27,16 @@ public static class ColumnHelper
         string accessorKey,
         string? id = null,
         object? header = null,
-        object? cell = null)
+        object? cell = null,
+        ColumnWidthDefinition? width = null)
     {
         return new ColumnDef<TData, TValue>
         {
             Id = id ?? accessorKey,
             AccessorKey = accessorKey,
             Header = header ?? accessorKey,
-            Cell = cell
+            Cell = cell,
+            Width = width
         };
     }
 
@@ -42,14 +44,16 @@ public static class ColumnHelper
         AccessorFn<TData, TValue> accessorFn,
         string id,
         object? header = null,
-        object? cell = null)
+        object? cell = null,
+        ColumnWidthDefinition? width = null)
     {
         return new ColumnDef<TData, TValue>
         {
             Id = id,
             AccessorFn = accessorFn,
             Header = header ?? id,
-            Cell = cell
+            Cell = cell,
+            Width = width
         };
     }
 

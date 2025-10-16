@@ -37,12 +37,12 @@ internal static class ExampleData
 
     public static List<ColumnDef<Person>> CreateDefaultColumns() => new()
     {
-        ColumnHelper.Accessor<Person, int>(p => p.Id, id: "id", header: "ID"),
-        ColumnHelper.Accessor<Person, string>(p => p.FirstName, id: "firstName", header: "First Name"),
-        ColumnHelper.Accessor<Person, string>(p => p.LastName, id: "lastName", header: "Last Name"),
-        ColumnHelper.Accessor<Person, int>(p => p.Age, id: "age", header: "Age"),
-        ColumnHelper.Accessor<Person, string>(p => p.Email, id: "email", header: "Email"),
-        ColumnHelper.Accessor<Person, string>(p => p.Department, id: "department", header: "Department"),
-        ColumnHelper.Accessor<Person, bool>(p => p.IsActive, id: "isActive", header: "Active")
+        ColumnHelper.Accessor<Person, int>(p => p.Id, id: "id", header: "ID", width: ColumnWidthDefinition.Fixed(80)),
+        ColumnHelper.Accessor<Person, string>(p => p.FirstName, id: "firstName", header: "First Name", width: ColumnWidthDefinition.Fixed(140)),
+        ColumnHelper.Accessor<Person, string>(p => p.LastName, id: "lastName", header: "Last Name", width: ColumnWidthDefinition.Fixed(140)),
+        ColumnHelper.Accessor<Person, int>(p => p.Age, id: "age", header: "Age", width: ColumnWidthDefinition.Fixed(80)),
+        ColumnHelper.Accessor<Person, string>(p => p.Email, id: "email", header: "Email", width: ColumnWidthDefinition.Star(3)),
+        ColumnHelper.Accessor<Person, string>(p => p.Department, id: "department", header: "Department", width: ColumnWidthDefinition.Star(2)),
+        ColumnHelper.Accessor<Person, bool>(p => p.IsActive, id: "isActive", header: "Active", width: ColumnWidthDefinition.Fixed(100))
     };
 }
