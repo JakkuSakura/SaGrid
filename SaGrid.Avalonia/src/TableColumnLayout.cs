@@ -292,10 +292,16 @@ public sealed class TableColumnLayoutManager<TData>
         }
 
         var sizingState = _table.State.ColumnSizing ?? new ColumnSizingState();
+        if (visibleColumns.All(c => sizingState.Items.ContainsKey(c.Id)))
+        {
+            _pendingStarSizing = false;
+            return;
+        }
+
         var updatedItems = new Dictionary<string, double>(sizingState.Items);
         var updatedStarWeights = new Dictionary<string, double>(sizingState.StarWeights);
 
-    double fixedTotal = 0;
+        double fixedTotal = 0;
         var starColumns = new List<StarColumnInfo>();
         var changed = false;
 
@@ -316,8 +322,11 @@ public sealed class TableColumnLayoutManager<TData>
                     changed = true;
                 }
 
-                starColumns.Add(new StarColumnInfo(column.Id, weight, min, max));
-                updatedItems.Remove(column.Id);
+                var existingWidth = updatedItems.TryGetValue(column.Id, out var stored)
+                    ? ClampToBounds(stored, min, max)
+                    : double.NaN;
+
+                starColumns.Add(new StarColumnInfo(column.Id, weight, min, max, existingWidth));
             }
             else
             {
@@ -356,6 +365,22 @@ public sealed class TableColumnLayoutManager<TData>
         if (!configuredTotal.HasValue || configuredTotal.Value <= 0)
         {
             throw new InvalidOperationException("Star sized columns require ColumnSizingState.TotalWidth to be specified.");
+        }
+
+        var hasMissingStarWidth = false;
+        foreach (var star in starColumns)
+        {
+            if (double.IsNaN(star.ExistingWidth))
+            {
+                hasMissingStarWidth = true;
+                break;
+            }
+        }
+
+        if (!hasMissingStarWidth)
+        {
+            _pendingStarSizing = false;
+            return;
         }
 
         var targetTotalWidth = Math.Max(configuredTotal.Value, fixedTotal);
@@ -547,7 +572,7 @@ public sealed class TableColumnLayoutManager<TData>
         }
     }
 
-    private readonly record struct StarColumnInfo(string Id, double Weight, double Min, double Max);
+    private readonly record struct StarColumnInfo(string Id, double Weight, double Min, double Max, double ExistingWidth);
 }
 
 public class ColumnLayoutPanel : Panel
