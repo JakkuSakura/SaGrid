@@ -28,7 +28,11 @@ internal sealed class ClientStarterExample : IExample
             EnableRowSelection = true,
             EnableCellSelection = true,
             EnableGlobalFilter = true,
-            EnableColumnResizing = true
+            EnableColumnResizing = true,
+            State = new TableState<Person>
+            {
+                ColumnSizing = new ColumnSizingState(totalWidth: ExampleData.DefaultTableWidth)
+            }
         };
 
         var grid = new SaGrid<Person>(options);

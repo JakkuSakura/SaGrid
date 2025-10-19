@@ -8,6 +8,8 @@ namespace Examples.Examples;
 
 internal static class ExampleData
 {
+    public const double DefaultTableWidth = 960;
+
     private static readonly string[] Departments = { "Engineering", "Marketing", "Sales", "HR", "Finance", "Operations", "Support" };
     private static readonly string[] FirstNames = { "Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry", "Jane", "John" };
     private static readonly string[] LastNames = { "Anderson", "Brown", "Davis", "Garcia", "Johnson", "Jones", "Miller", "Smith", "Taylor", "Williams" };

@@ -28,7 +28,11 @@ internal sealed class BatchEditingExample : IExample
             EnableRowSelection = true,
             EnableCellSelection = true,
             EnableGlobalFilter = false,
-            EnableColumnResizing = true
+            EnableColumnResizing = true,
+            State = new TableState<Person>
+            {
+                ColumnSizing = new ColumnSizingState(totalWidth: ExampleData.DefaultTableWidth)
+            }
         };
 
         var grid = new SaGrid<Person>(options);

@@ -120,11 +120,55 @@ public static class StateExtensions
         return state with { Items = newDict };
     }
 
+    public static double GetStarWeightOrDefault(this ColumnSizingState state, string key, double defaultValue = 0)
+    {
+        return state.StarWeights.TryGetValue(key, out var weight) ? weight : defaultValue;
+    }
+
+    public static ColumnSizingState WithStarWeight(this ColumnSizingState state, string key, double weight)
+    {
+        var newWeights = new Dictionary<string, double>(state.StarWeights);
+        if (weight <= 0)
+        {
+            newWeights.Remove(key);
+        }
+        else
+        {
+            newWeights[key] = weight;
+        }
+
+        return state with { StarWeights = newWeights };
+    }
+
     public static ColumnSizingState Remove(this ColumnSizingState state, string key)
     {
         var newDict = new Dictionary<string, double>(state.Items);
         newDict.Remove(key);
-        return state with { Items = newDict };
+        if (!state.StarWeights.ContainsKey(key))
+        {
+            return state with { Items = newDict };
+        }
+
+        var newWeights = new Dictionary<string, double>(state.StarWeights);
+        newWeights.Remove(key);
+        return state with { Items = newDict, StarWeights = newWeights };
+    }
+
+    public static ColumnSizingState RemoveStarWeight(this ColumnSizingState state, string key)
+    {
+        if (!state.StarWeights.ContainsKey(key))
+        {
+            return state;
+        }
+
+        var newWeights = new Dictionary<string, double>(state.StarWeights);
+        newWeights.Remove(key);
+        return state with { StarWeights = newWeights };
+    }
+
+    public static ColumnSizingState WithTotalWidth(this ColumnSizingState state, double? totalWidth)
+    {
+        return state with { TotalWidth = totalWidth };
     }
 
     public static ColumnVisibilityState Remove(this ColumnVisibilityState state, string key)
