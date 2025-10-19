@@ -31,7 +31,8 @@ internal sealed class ClientStarterExample : IExample
             EnableColumnResizing = true,
             State = new TableState<Person>
             {
-                ColumnSizing = new ColumnSizingState(totalWidth: ExampleData.DefaultTableWidth)
+                // ColumnSizing = new ColumnSizingState(totalWidth: ExampleData.DefaultTableWidth)
+                ColumnSizing = new ColumnSizingState()   // 不传 totalWidth，默认 null
             }
         };
 

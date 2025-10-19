@@ -226,6 +226,9 @@ public class SaGridComponent<TData> : SolidTable<TData>
                 .BorderBrush(Brushes.Gray)
                 .Child(_rootGrid);
 
+            _rootBorder.AttachedToVisualTree += RootBorderOnAttached;
+            _rootBorder.DetachedFromVisualTree += RootBorderOnDetached;
+
             RebuildHeaderStructure();
             EnsureBodyControl(force: true);
 
@@ -245,6 +248,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
         }
 
         EnsureBodyControl();
+        ReportAvailableWidth();
         return _rootBorder!;
     }
 
@@ -292,6 +296,60 @@ public class SaGridComponent<TData> : SolidTable<TData>
             });
 
         _callbacksConnected = true;
+    }
+
+    private void RootBorderOnAttached(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        if (sender is Border border)
+        {
+            border.PropertyChanged += RootBorderOnPropertyChanged;
+            ReportAvailableWidth();
+        }
+    }
+
+    private void RootBorderOnDetached(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        if (sender is Border border)
+        {
+            border.PropertyChanged -= RootBorderOnPropertyChanged;
+        }
+    }
+
+    private void RootBorderOnPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == BoundsProperty)
+        {
+            ReportAvailableWidth();
+        }
+    }
+
+    private void ReportAvailableWidth()
+    {
+        if (_rootBorder == null)
+        {
+            return;
+        }
+
+        var bounds = _rootBorder.Bounds;
+        var width = bounds.Width;
+        if (double.IsNaN(width) || width <= 0)
+        {
+            return;
+        }
+
+        var borderWidth = _rootBorder.BorderThickness.Left + _rootBorder.BorderThickness.Right;
+        var paddingWidth = _rootBorder.Padding.Left + _rootBorder.Padding.Right;
+        var effectiveWidth = width - borderWidth - paddingWidth;
+        if (effectiveWidth <= 0)
+        {
+            return;
+        }
+
+        if (_layoutManager != null)
+        {
+            _layoutManager.ReportViewportWidth(effectiveWidth);
+            _layoutManager.Refresh();
+        }
     }
 
     private void EnsureDragDropInfrastructure()
