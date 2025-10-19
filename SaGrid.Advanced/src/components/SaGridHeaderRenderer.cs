@@ -34,6 +34,26 @@ internal class SaGridHeaderRenderer<TData>
 
     private bool HasInteractivity => _dragDropManager != null && _columnService != null;
 
+    private static Column<TData>? FindRightNeighbour(Table<TData> table, Column<TData> column)
+    {
+        return table.VisibleLeafColumns
+            .Cast<Column<TData>>()
+            .SkipWhile(c => c.Id != column.Id)
+            .Skip(1)
+            .OfType<Column<TData>>()
+            .FirstOrDefault(c => c.CanResize);
+    }
+
+    private static bool HasRightResizeTarget(Table<TData> table, Column<TData> column)
+    {
+        return FindRightNeighbour(table, column) != null;
+    }
+
+    private static bool IsStarColumn(Column<TData> column)
+    {
+        return column.ColumnDef.Width?.Mode == ColumnWidthMode.Star;
+    }
+
     public SaGridHeaderRenderer(Action<TextBox>? onFilterFocus = null, Action<string, TextBox>? onFilterTextBoxCreated = null)
     {
         _onFilterFocus = onFilterFocus;
@@ -272,7 +292,8 @@ internal class SaGridHeaderRenderer<TData>
 
         var dock = new DockPanel { LastChildFill = true };
 
-    var resizeRail = CreateResizeRail(table, column, border, enableResize: true);
+        var canResize = column.CanResize && HasRightResizeTarget(table, column);
+        var resizeRail = CreateResizeRail(table, column, border, enableResize: canResize);
         DockPanel.SetDock(resizeRail, Dock.Right);
         dock.Children.Add(resizeRail);
 
@@ -306,7 +327,8 @@ internal class SaGridHeaderRenderer<TData>
             _activeDragSources.Add(dragSource);
         }
 
-    var resizeRail = CreateResizeRail(table, column, border, enableResize: true);
+        var canResize = column.CanResize && HasRightResizeTarget(table, column);
+        var resizeRail = CreateResizeRail(table, column, border, enableResize: canResize);
         DockPanel.SetDock(resizeRail, Dock.Right);
         headerDock.Children.Add(resizeRail);
 
@@ -340,8 +362,8 @@ internal class SaGridHeaderRenderer<TData>
 
     private Control CreateResizeRail(Table<TData> table, Column<TData> column, Border headerBorder, bool enableResize)
     {
-    var service = _columnService;
-    var canResize = enableResize && column.CanResize && !column.Columns.Any();
+        var service = _columnService;
+        var canResize = enableResize && service != null && column.CanResize && !column.Columns.Any() && HasRightResizeTarget(table, column);
 
         var rail = new Grid
         {
@@ -370,13 +392,11 @@ internal class SaGridHeaderRenderer<TData>
             return rail;
         }
 
-    bool isDragging = false;
-    bool isPairResize = false;
-    double lastPointerX = 0;
-    double currentWidth = column.Size;
-    Column<TData>? neighbourColumn = null;
-    IDisposable? resizeScope = null;
-    Visual? dragReferenceVisual = null;
+        bool isDragging = false;
+        double lastPointerX = 0;
+        Column<TData>? neighbourColumn = null;
+        IDisposable? resizeScope = null;
+        Visual? dragReferenceVisual = null;
 
         void ResetLine()
         {
@@ -409,23 +429,16 @@ internal class SaGridHeaderRenderer<TData>
                 return;
             }
 
-            isDragging = true;
-            isPairResize = service != null && e.KeyModifiers.HasFlag(KeyModifiers.Shift);
-
             dragReferenceVisual = (headerBorder.GetVisualRoot() as Visual) ?? rail;
             lastPointerX = e.GetPosition(dragReferenceVisual).X;
-            currentWidth = column.Size;
-            neighbourColumn = table.VisibleLeafColumns
-                .SkipWhile(c => c.Id != column.Id)
-                .Skip(1)
-                .OfType<Column<TData>>()
-                .FirstOrDefault(c => c.CanResize);
+            neighbourColumn = FindRightNeighbour(table, column);
 
             if (neighbourColumn == null)
             {
-                isPairResize = false;
+                return;
             }
 
+            isDragging = true;
             resizeScope ??= _layoutManager?.BeginUserResize(column.Id);
 
             e.Pointer.Capture(rail);
@@ -449,32 +462,18 @@ internal class SaGridHeaderRenderer<TData>
 
             lastPointerX = currentX;
 
-            if (isPairResize && neighbourColumn != null && service != null)
+            var applied = false;
+
+            if (service != null && neighbourColumn != null)
             {
-                if (service.ResizeColumnPair(column.Id, neighbourColumn.Id, delta))
-                {
-                    _layoutManager?.RegisterManualWidth(column.Id);
-                    _layoutManager?.RegisterManualWidth(neighbourColumn.Id);
-                }
-            }
-            else
-            {
-                currentWidth = Math.Max(40, currentWidth + delta);
-                if (service != null)
-                {
-                    if (service.SetColumnWidth(column.Id, currentWidth))
-                    {
-                        _layoutManager?.RegisterManualWidth(column.Id);
-                    }
-                }
-                else
-                {
-                    column.SetSize(currentWidth);
-                    _layoutManager?.RegisterManualWidth(column.Id);
-                }
+                applied = service.ResizeColumnPair(column.Id, neighbourColumn.Id, delta);
             }
 
-            _layoutManager?.Refresh();
+            if (applied)
+            {
+                _layoutManager?.Refresh();
+            }
+
             e.Handled = true;
         };
 
@@ -486,7 +485,6 @@ internal class SaGridHeaderRenderer<TData>
             }
 
             isDragging = false;
-            isPairResize = false;
             neighbourColumn = null;
             ResetLine();
             dragReferenceVisual = null;
@@ -512,7 +510,6 @@ internal class SaGridHeaderRenderer<TData>
         rail.PointerCaptureLost += (_, _) =>
         {
             isDragging = false;
-            isPairResize = false;
             neighbourColumn = null;
             ResetLine();
             dragReferenceVisual = null;
@@ -525,17 +522,16 @@ internal class SaGridHeaderRenderer<TData>
             {
                 if (service.AutoSizeColumn(column.Id))
                 {
-                    _layoutManager?.RegisterManualWidth(column.Id);
+                    _layoutManager?.Refresh();
                 }
             }
             else
             {
                 column.ResetSize();
-                _layoutManager?.RegisterManualWidth(column.Id);
+                _layoutManager?.Refresh();
             }
 
             CompleteResizeSession();
-            _layoutManager?.Refresh();
             ResetLine();
             e.Handled = true;
         };

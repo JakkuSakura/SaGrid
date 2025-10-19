@@ -146,7 +146,6 @@ public sealed class TableColumnLayoutManager<TData>
     private TableColumnLayoutSnapshot _snapshot;
     private readonly List<ColumnLayoutPanel> _panels = new();
     private readonly Dictionary<string, ColumnWidthDefinition> _widthDefinitions = new();
-    private readonly HashSet<string> _manualStarOverrides = new();
     private double _lastAvailableWidth = double.NaN;
     private bool _isApplyingSizing;
     private int _autoSizingSuspendCount;
@@ -223,14 +222,6 @@ public sealed class TableColumnLayoutManager<TData>
                 _widthDefinitions[column.Id] = column.ColumnDef.Width.Value;
             }
         }
-
-        foreach (var columnId in _manualStarOverrides.ToList())
-        {
-            if (!_widthDefinitions.TryGetValue(columnId, out var definition) || definition.Mode != ColumnWidthMode.Star)
-            {
-                _manualStarOverrides.Remove(columnId);
-            }
-        }
     }
 
     private void OnPanelWidthAvailable(double width)
@@ -277,15 +268,11 @@ public sealed class TableColumnLayoutManager<TData>
     public void RegisterManualWidth(string columnId)
     {
         _pendingStarSizing = true;
-
-        if (_widthDefinitions.TryGetValue(columnId, out var definition) && definition.Mode == ColumnWidthMode.Star)
-        {
-            _manualStarOverrides.Add(columnId);
-        }
     }
 
     private void EnsureStarSizing(double availableWidth)
     {
+        _ = availableWidth;
         if (_isApplyingSizing)
         {
             return;
@@ -306,135 +293,102 @@ public sealed class TableColumnLayoutManager<TData>
 
         var sizingState = _table.State.ColumnSizing ?? new ColumnSizingState();
         var updatedItems = new Dictionary<string, double>(sizingState.Items);
-        var starColumns = new List<StarColumnInfo>();
-        double fixedTotal = 0;
-        var changed = false;
+        var updatedStarWeights = new Dictionary<string, double>(sizingState.StarWeights);
 
-        foreach (var columnId in _manualStarOverrides.ToList())
-        {
-            if (!updatedItems.ContainsKey(columnId))
-            {
-                _manualStarOverrides.Remove(columnId);
-            }
-        }
+    double fixedTotal = 0;
+        var starColumns = new List<StarColumnInfo>();
+        var changed = false;
 
         foreach (var column in visibleColumns)
         {
             var (min, max) = GetBounds(column);
-            var hasManualSizing = sizingState.Items.ContainsKey(column.Id);
+            var isStar = _widthDefinitions.TryGetValue(column.Id, out var definition) && definition.Mode == ColumnWidthMode.Star;
 
-            if (_manualStarOverrides.Contains(column.Id))
+            if (isStar)
             {
-                if (updatedItems.TryGetValue(column.Id, out var manualWidth))
-                {
-                    var clampedManual = ClampToBounds(manualWidth, min, max);
-                    if (Math.Abs(clampedManual - manualWidth) > 0.5)
-                    {
-                        updatedItems[column.Id] = clampedManual;
-                        changed = true;
-                    }
+                double weight = updatedStarWeights.TryGetValue(column.Id, out var storedWeight) && storedWeight > 0
+                    ? storedWeight
+                    : (definition.Value <= 0 ? 1 : definition.Value);
 
-                    fixedTotal += clampedManual;
+                if (!updatedStarWeights.ContainsKey(column.Id) || Math.Abs(updatedStarWeights[column.Id] - weight) > 0.0001)
+                {
+                    updatedStarWeights[column.Id] = weight;
+                    changed = true;
                 }
 
-                continue;
+                starColumns.Add(new StarColumnInfo(column.Id, weight, min, max));
+                updatedItems.Remove(column.Id);
             }
-
-            if (_widthDefinitions.TryGetValue(column.Id, out var definition))
+            else
             {
-                if (definition.Mode == ColumnWidthMode.Fixed)
+                if (updatedStarWeights.ContainsKey(column.Id))
                 {
-                    if (hasManualSizing && updatedItems.TryGetValue(column.Id, out var manualWidth))
-                    {
-                        var clampedManual = ClampToBounds(manualWidth, min, max);
-                        if (Math.Abs(clampedManual - manualWidth) > 0.5)
-                        {
-                            updatedItems[column.Id] = clampedManual;
-                            changed = true;
-                        }
-
-                        fixedTotal += clampedManual;
-                    }
-                    else
-                    {
-                        var target = ClampToBounds(definition.Value, min, max);
-                        if (!updatedItems.TryGetValue(column.Id, out var current) || Math.Abs(current - target) > 0.5)
-                        {
-                            updatedItems[column.Id] = target;
-                            changed = true;
-                        }
-
-                        fixedTotal += target;
-                    }
-
-                    continue;
+                    updatedStarWeights.Remove(column.Id);
+                    changed = true;
                 }
 
-                if (definition.Mode == ColumnWidthMode.Star)
+                double target = updatedItems.TryGetValue(column.Id, out var manualWidth)
+                    ? ClampToBounds(manualWidth, min, max)
+                    : DetermineFixedWidth(column, min, max);
+
+                if (!updatedItems.TryGetValue(column.Id, out var existing) || Math.Abs(existing - target) > 0.5)
                 {
-                    updatedItems.Remove(column.Id);
-
-                    var currentWidth = sizingState.Items.TryGetValue(column.Id, out var stored)
-                        ? ClampToBounds(stored, min, max)
-                        : ClampToBounds(column.Size, min, max);
-
-                    starColumns.Add(new StarColumnInfo(column.Id, definition.Value <= 0 ? 1 : definition.Value, min, max, currentWidth));
-                    continue;
+                    updatedItems[column.Id] = target;
+                    changed = true;
                 }
+
+                fixedTotal += target;
             }
-
-            var fallbackWidth = updatedItems.TryGetValue(column.Id, out var existingWidth)
-                ? existingWidth
-                : ClampToBounds(column.Size, min, max);
-
-            fallbackWidth = ClampToBounds(fallbackWidth, min, max);
-
-            if (!updatedItems.TryGetValue(column.Id, out var existing) || Math.Abs(existing - fallbackWidth) > 0.5)
-            {
-                updatedItems[column.Id] = fallbackWidth;
-                changed = true;
-            }
-
-            fixedTotal += fallbackWidth;
         }
 
         if (starColumns.Count == 0)
         {
             if (changed)
             {
-                ApplySizing(updatedItems);
+                ApplySizing(updatedItems, updatedStarWeights, sizingState.TotalWidth);
             }
 
             _pendingStarSizing = false;
             return;
         }
 
-        var starWidths = ComputeStarWidths(availableWidth, fixedTotal, starColumns);
+        var configuredTotal = sizingState.TotalWidth;
+        if (!configuredTotal.HasValue || configuredTotal.Value <= 0)
+        {
+            throw new InvalidOperationException("Star sized columns require ColumnSizingState.TotalWidth to be specified.");
+        }
+
+        var targetTotalWidth = Math.Max(configuredTotal.Value, fixedTotal);
+
+        var starWidths = ComputeStarWidths(targetTotalWidth, fixedTotal, starColumns);
 
         foreach (var star in starColumns)
         {
-            var target = ClampToBounds(starWidths.GetValueOrDefault(star.Id, star.Current), star.Min, star.Max);
-            if (!updatedItems.TryGetValue(star.Id, out var existing) || Math.Abs(existing - target) > 0.5)
+            var width = ClampToBounds(starWidths.GetValueOrDefault(star.Id, star.Min), star.Min, star.Max);
+            if (!updatedItems.TryGetValue(star.Id, out var existing) || Math.Abs(existing - width) > 0.5)
             {
-                updatedItems[star.Id] = target;
+                updatedItems[star.Id] = width;
                 changed = true;
             }
         }
 
         if (changed)
         {
-            ApplySizing(updatedItems);
+            ApplySizing(updatedItems, updatedStarWeights, targetTotalWidth);
         }
 
         _pendingStarSizing = false;
     }
 
-    private void ApplySizing(Dictionary<string, double> items)
+    private void ApplySizing(Dictionary<string, double> items, Dictionary<string, double> starWeights, double? totalWidth)
     {
         _isApplyingSizing = true;
         try
         {
-            var newSizing = new ColumnSizingState(new Dictionary<string, double>(items));
+            var newSizing = new ColumnSizingState(
+                new Dictionary<string, double>(items),
+                new Dictionary<string, double>(starWeights),
+                totalWidth);
             _table.SetState(state => state with { ColumnSizing = newSizing }, updateRowModel: false);
         }
         finally
@@ -550,6 +504,16 @@ public sealed class TableColumnLayoutManager<TData>
         return (min, max);
     }
 
+    private double DetermineFixedWidth(Column<TData> column, double min, double max)
+    {
+        if (_widthDefinitions.TryGetValue(column.Id, out var definition) && definition.Mode == ColumnWidthMode.Fixed)
+        {
+            return ClampToBounds(definition.Value, min, max);
+        }
+
+        return ClampToBounds(column.Size, min, max);
+    }
+
     private static double ClampToBounds(double width, double min, double max)
     {
         var clamped = double.IsNaN(width) ? min : Math.Max(width, min);
@@ -583,7 +547,7 @@ public sealed class TableColumnLayoutManager<TData>
         }
     }
 
-    private readonly record struct StarColumnInfo(string Id, double Weight, double Min, double Max, double Current);
+    private readonly record struct StarColumnInfo(string Id, double Weight, double Min, double Max);
 }
 
 public class ColumnLayoutPanel : Panel

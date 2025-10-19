@@ -96,7 +96,7 @@ public class ColumnInteractiveService<TData>
     public bool SetColumnWidth(string columnId, double width)
     {
         var column = _table.GetColumn(columnId);
-        if (column == null || !column.CanResize)
+        if (column == null || !column.CanResize || IsStarColumn(column))
         {
             return false;
         }
@@ -125,7 +125,7 @@ public class ColumnInteractiveService<TData>
         try
         {
             var column = _table.GetColumn(columnId);
-            if (column == null)
+            if (column == null || IsStarColumn(column))
             {
                 return false;
             }
@@ -475,60 +475,244 @@ public class ColumnInteractiveService<TData>
 
     public bool ResizeColumnPair(string primaryColumnId, string? secondaryColumnId, double delta)
     {
-        var primary = _table.GetColumn(primaryColumnId);
-        if (primary == null || !primary.CanResize)
+        if (string.IsNullOrEmpty(secondaryColumnId))
         {
             return false;
         }
 
-        var (primaryMin, primaryMax) = GetColumnMinMax(primary);
-        var sizing = _table.State.ColumnSizing ?? new ColumnSizingState();
-        var primaryWidth = primary.Size;
-
-        var desiredPrimary = Math.Clamp(primaryWidth + delta, primaryMin, primaryMax);
-        var appliedDelta = desiredPrimary - primaryWidth;
-
-        ColumnSizingState newSizing;
-
-        if (!string.IsNullOrEmpty(secondaryColumnId))
+        if (_table.GetColumn(primaryColumnId) is not Column<TData> primary ||
+            _table.GetColumn(secondaryColumnId) is not Column<TData> secondary)
         {
-            var secondary = _table.GetColumn(secondaryColumnId);
-            if (secondary == null || !secondary.CanResize)
-            {
-                return false;
-            }
+            return false;
+        }
 
-            var (secondaryMin, secondaryMax) = GetColumnMinMax(secondary);
-            var secondaryWidth = secondary.Size;
-            var desiredSecondary = Math.Clamp(secondaryWidth - appliedDelta, secondaryMin, secondaryMax);
+        if (!primary.CanResize || !secondary.CanResize)
+        {
+            return false;
+        }
 
-            // adjust delta if neighbour cannot shrink fully
-            var neighbourDelta = secondaryWidth - desiredSecondary;
-            if (Math.Abs(neighbourDelta - appliedDelta) > 0.01)
-            {
-                appliedDelta = neighbourDelta;
-                desiredPrimary = Math.Clamp(primaryWidth + appliedDelta, primaryMin, primaryMax);
-            }
+        var sizing = _table.State.ColumnSizing ?? new ColumnSizingState();
+        var widths = new Dictionary<string, double>(sizing.Items);
+        var starWeights = new Dictionary<string, double>(sizing.StarWeights);
+        var totalWidth = sizing.TotalWidth
+            ?? _table.VisibleLeafColumns.Cast<Column<TData>>().Sum(c => c.Size);
 
-            newSizing = sizing
-                .With(primaryColumnId, desiredPrimary)
-                .With(secondaryColumnId!, desiredSecondary);
+        var starColumns = _table.VisibleLeafColumns
+            .Cast<Column<TData>>()
+            .Where(IsStarColumn)
+            .ToList();
 
-            _eventService.DispatchEvent("columnResized", new ColumnResizedEventArgs<TData>(secondaryColumnId!, desiredSecondary));
+        var primarySnapshot = CreateSnapshot(primary);
+        var secondarySnapshot = CreateSnapshot(secondary);
+
+        var changed = false;
+
+        if (!primarySnapshot.IsStar && !secondarySnapshot.IsStar)
+        {
+            changed = ApplyFixedFixedResize(primarySnapshot, secondarySnapshot, delta, widths);
+        }
+        else if (primarySnapshot.IsStar && secondarySnapshot.IsStar)
+        {
+            changed = ApplyStarStarResize(primarySnapshot, secondarySnapshot, delta, widths, starWeights, starColumns);
+        }
+        else if (!primarySnapshot.IsStar && secondarySnapshot.IsStar)
+        {
+            changed = ApplyFixedStarResize(primarySnapshot, secondarySnapshot, delta, widths, starWeights, starColumns);
         }
         else
         {
-            newSizing = sizing.With(primaryColumnId, desiredPrimary);
+            changed = ApplyStarFixedResize(primarySnapshot, secondarySnapshot, delta, widths, starWeights, starColumns);
         }
 
-        if (Math.Abs(appliedDelta) < 0.01)
+        if (!changed)
         {
             return false;
         }
 
-        _table.SetState(state => state with { ColumnSizing = newSizing });
-        _eventService.DispatchEvent("columnResized", new ColumnResizedEventArgs<TData>(primaryColumnId, desiredPrimary));
+        var newState = new ColumnSizingState(widths, starWeights, totalWidth);
+        _table.SetState(state => state with { ColumnSizing = newState });
+
+        if (widths.TryGetValue(primary.Id, out var primaryWidth))
+        {
+            _eventService.DispatchEvent("columnResized", new ColumnResizedEventArgs<TData>(primary.Id, primaryWidth));
+        }
+
+        if (widths.TryGetValue(secondary.Id, out var secondaryWidth))
+        {
+            _eventService.DispatchEvent("columnResized", new ColumnResizedEventArgs<TData>(secondary.Id, secondaryWidth));
+        }
+
         return true;
+    }
+
+    private readonly record struct ColumnSnapshot(Column<TData> Column, double Width, double Min, double Max, bool IsStar)
+    {
+        public string Id => Column.Id;
+    }
+
+    private ColumnSnapshot CreateSnapshot(Column<TData> column)
+    {
+        var (min, max) = GetColumnMinMax(column);
+        return new ColumnSnapshot(column, column.Size, min, max, IsStarColumn(column));
+    }
+
+    private static (double Primary, double Secondary) SolvePairedWidths(ColumnSnapshot primary, ColumnSnapshot secondary, double delta)
+    {
+        var pairSum = primary.Width + secondary.Width;
+        var desiredPrimary = Math.Clamp(primary.Width + delta, primary.Min, primary.Max);
+        desiredPrimary = Math.Clamp(desiredPrimary, pairSum - secondary.Max, pairSum - secondary.Min);
+        var desiredSecondary = pairSum - desiredPrimary;
+        desiredSecondary = Math.Clamp(desiredSecondary, secondary.Min, secondary.Max);
+        desiredPrimary = pairSum - desiredSecondary;
+        return (desiredPrimary, desiredSecondary);
+    }
+
+    private bool ApplyFixedFixedResize(ColumnSnapshot primary, ColumnSnapshot secondary, double delta, Dictionary<string, double> widths)
+    {
+        var (desiredPrimary, desiredSecondary) = SolvePairedWidths(primary, secondary, delta);
+
+        if (Math.Abs(desiredPrimary - primary.Width) < 0.01 && Math.Abs(desiredSecondary - secondary.Width) < 0.01)
+        {
+            return false;
+        }
+
+        widths[primary.Id] = desiredPrimary;
+        widths[secondary.Id] = desiredSecondary;
+        return true;
+    }
+
+    private bool ApplyStarStarResize(
+        ColumnSnapshot primary,
+        ColumnSnapshot secondary,
+        double delta,
+        Dictionary<string, double> widths,
+        Dictionary<string, double> starWeights,
+        IReadOnlyList<Column<TData>> starColumns)
+    {
+        var (desiredPrimary, desiredSecondary) = SolvePairedWidths(primary, secondary, delta);
+
+        if (Math.Abs(desiredPrimary - primary.Width) < 0.01 && Math.Abs(desiredSecondary - secondary.Width) < 0.01)
+        {
+            return false;
+        }
+
+        var targets = new Dictionary<string, double>(starColumns.Count);
+        foreach (var star in starColumns)
+        {
+            var width = star.Size;
+            if (star.Id == primary.Id)
+            {
+                width = desiredPrimary;
+            }
+            else if (star.Id == secondary.Id)
+            {
+                width = desiredSecondary;
+            }
+
+            targets[star.Id] = width;
+        }
+
+        ApplyStarTargets(starColumns, targets, widths, starWeights);
+        widths[primary.Id] = desiredPrimary;
+        widths[secondary.Id] = desiredSecondary;
+        return true;
+    }
+
+    private bool ApplyFixedStarResize(
+        ColumnSnapshot fixedColumn,
+        ColumnSnapshot starColumn,
+        double delta,
+        Dictionary<string, double> widths,
+        Dictionary<string, double> starWeights,
+        IReadOnlyList<Column<TData>> starColumns)
+    {
+        var (desiredFixed, desiredStar) = SolvePairedWidths(fixedColumn, starColumn, delta);
+
+        if (Math.Abs(desiredFixed - fixedColumn.Width) < 0.01 && Math.Abs(desiredStar - starColumn.Width) < 0.01)
+        {
+            return false;
+        }
+
+        widths[fixedColumn.Id] = desiredFixed;
+
+        var targets = new Dictionary<string, double>(starColumns.Count);
+        foreach (var star in starColumns)
+        {
+            var width = star.Size;
+            if (star.Id == starColumn.Id)
+            {
+                width = desiredStar;
+            }
+
+            targets[star.Id] = width;
+        }
+
+        ApplyStarTargets(starColumns, targets, widths, starWeights);
+        return true;
+    }
+
+    private bool ApplyStarFixedResize(
+        ColumnSnapshot starColumn,
+        ColumnSnapshot fixedColumn,
+        double delta,
+        Dictionary<string, double> widths,
+        Dictionary<string, double> starWeights,
+        IReadOnlyList<Column<TData>> starColumns)
+    {
+        var (desiredStar, desiredFixed) = SolvePairedWidths(starColumn, fixedColumn, delta);
+
+        if (Math.Abs(desiredStar - starColumn.Width) < 0.01 && Math.Abs(desiredFixed - fixedColumn.Width) < 0.01)
+        {
+            return false;
+        }
+
+        widths[fixedColumn.Id] = desiredFixed;
+
+        var targets = new Dictionary<string, double>(starColumns.Count);
+        foreach (var star in starColumns)
+        {
+            var width = star.Size;
+            if (star.Id == starColumn.Id)
+            {
+                width = desiredStar;
+            }
+
+            targets[star.Id] = width;
+        }
+
+        ApplyStarTargets(starColumns, targets, widths, starWeights);
+        return true;
+    }
+
+    private void ApplyStarTargets(
+        IReadOnlyList<Column<TData>> starColumns,
+        IReadOnlyDictionary<string, double> targets,
+        Dictionary<string, double> widths,
+        Dictionary<string, double> starWeights)
+    {
+        foreach (var column in starColumns)
+        {
+            var targetWidth = targets.TryGetValue(column.Id, out var width)
+                ? width
+                : column.Size;
+
+            var (min, _) = GetColumnMinMax(column);
+            var clamped = Math.Max(targetWidth, min);
+
+            widths[column.Id] = clamped;
+
+            var share = Math.Max(clamped - min, 0);
+            starWeights[column.Id] = share;
+        }
+
+        var knownStarIds = new HashSet<string>(starColumns.Select(c => c.Id));
+        foreach (var key in starWeights.Keys.ToList())
+        {
+            if (!knownStarIds.Contains(key))
+            {
+                starWeights.Remove(key);
+            }
+        }
     }
 
     private (double Min, double Max) GetColumnMinMax(Column<TData> column)
@@ -542,6 +726,11 @@ public class ColumnInteractiveService<TData>
             : double.PositiveInfinity;
 
         return (min, max);
+    }
+
+    private static bool IsStarColumn(Column<TData> column)
+    {
+        return column.ColumnDef.Width?.Mode == ColumnWidthMode.Star;
     }
 
     private string? ResolvePinnedPreference(string columnId)

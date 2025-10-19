@@ -52,7 +52,8 @@ internal sealed class ServerSideAnalyticsExample : IExample
             OnStateChange = state => onStateChange?.Invoke(state),
             State = new TableState<Person>
             {
-                Pagination = new PaginationState { PageIndex = 0, PageSize = 15 }
+                Pagination = new PaginationState { PageIndex = 0, PageSize = 15 },
+                ColumnSizing = new ColumnSizingState(totalWidth: ExampleData.DefaultTableWidth)
             }
         };
 

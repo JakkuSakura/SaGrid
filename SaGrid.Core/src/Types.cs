@@ -168,9 +168,14 @@ public record CellSelectionDelta(
     CellPosition? ActiveCell,
     CellRange? Range);
 
-public record ColumnSizingState(Dictionary<string, double> Items = null!)
+public record ColumnSizingState(
+    Dictionary<string, double>? items = null,
+    Dictionary<string, double>? starWeights = null,
+    double? totalWidth = null)
 {
-    public Dictionary<string, double> Items { get; init; } = Items ?? new();
+    public Dictionary<string, double> Items { get; init; } = items ?? new();
+    public Dictionary<string, double> StarWeights { get; init; } = starWeights ?? new();
+    public double? TotalWidth { get; init; } = totalWidth;
 }
 
 public enum ColumnWidthMode
