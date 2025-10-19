@@ -150,6 +150,8 @@ public sealed class TableColumnLayoutManager<TData>
     private bool _isApplyingSizing;
     private int _autoSizingSuspendCount;
     private bool _pendingStarSizing;
+    private bool _lastTotalWidthWasAuto = true;
+    private double _lastAppliedTotalWidth = double.NaN;
 
     public TableColumnLayoutManager(Table<TData> table)
     {
@@ -243,6 +245,25 @@ public sealed class TableColumnLayoutManager<TData>
         }
     }
 
+    public void ReportViewportWidth(double width)
+    {
+        if (double.IsNaN(width) || width <= 0)
+        {
+            return;
+        }
+
+        _lastAvailableWidth = width;
+
+        if (_autoSizingSuspendCount == 0)
+        {
+            EnsureStarSizing(width);
+        }
+        else
+        {
+            _pendingStarSizing = true;
+        }
+    }
+
     public IDisposable? BeginUserResize(string columnId)
     {
         _autoSizingSuspendCount++;
@@ -272,7 +293,6 @@ public sealed class TableColumnLayoutManager<TData>
 
     private void EnsureStarSizing(double availableWidth)
     {
-        _ = availableWidth;
         if (_isApplyingSizing)
         {
             return;
@@ -292,11 +312,19 @@ public sealed class TableColumnLayoutManager<TData>
         }
 
         var sizingState = _table.State.ColumnSizing ?? new ColumnSizingState();
-        if (visibleColumns.All(c => sizingState.Items.ContainsKey(c.Id)))
-        {
-            _pendingStarSizing = false;
-            return;
-        }
+
+        var configuredTotal = sizingState.TotalWidth;
+        var normalizedAvailableWidth = (!double.IsNaN(availableWidth) && !double.IsInfinity(availableWidth) && availableWidth > 0)
+            ? availableWidth
+            : double.NaN;
+
+        var hasConfiguredTotal = configuredTotal.HasValue && configuredTotal.Value > 0;
+        var treatedAsExplicitTotal = hasConfiguredTotal &&
+                                     (
+                                         !_lastTotalWidthWasAuto ||
+                                         double.IsNaN(_lastAppliedTotalWidth) ||
+                                         Math.Abs(configuredTotal!.Value - _lastAppliedTotalWidth) > 0.5
+                                     );
 
         var updatedItems = new Dictionary<string, double>(sizingState.Items);
         var updatedStarWeights = new Dictionary<string, double>(sizingState.StarWeights);
@@ -350,8 +378,26 @@ public sealed class TableColumnLayoutManager<TData>
             }
         }
 
-        var configuredTotal = sizingState.TotalWidth;
-        if (configuredTotal.HasValue)
+        var desiredTotalCandidate = treatedAsExplicitTotal
+            ? configuredTotal!.Value
+            : normalizedAvailableWidth;
+
+        if (double.IsNaN(desiredTotalCandidate) && hasConfiguredTotal)
+        {
+            desiredTotalCandidate = configuredTotal!.Value;
+        }
+
+        var targetTotalWidth = desiredTotalCandidate;
+
+        if (double.IsNaN(targetTotalWidth) || targetTotalWidth <= 0)
+        {
+            _pendingStarSizing = true;
+            return;
+        }
+
+        targetTotalWidth = Math.Max(targetTotalWidth, fixedTotal);
+
+        if (starColumns.Count == 0)
         {
             double measuredTotal = 0;
             var missingMeasurement = false;
@@ -369,27 +415,18 @@ public sealed class TableColumnLayoutManager<TData>
                 }
             }
 
-            if (!missingMeasurement && Math.Abs(measuredTotal - configuredTotal.Value) <= 0.5)
+            if (!missingMeasurement && Math.Abs(measuredTotal - targetTotalWidth) <= 0.5)
             {
                 _pendingStarSizing = false;
                 return;
             }
-        }
-
-        if (starColumns.Count == 0)
-        {
             if (changed)
             {
-                ApplySizing(updatedItems, updatedStarWeights, sizingState.TotalWidth);
+                ApplySizing(updatedItems, updatedStarWeights, targetTotalWidth, treatedAsExplicitTotal);
             }
 
             _pendingStarSizing = false;
             return;
-        }
-
-        if (!configuredTotal.HasValue || configuredTotal.Value <= 0)
-        {
-            throw new InvalidOperationException("Star sized columns require ColumnSizingState.TotalWidth to be specified.");
         }
 
         var hasMissingStarWidth = false;
@@ -404,11 +441,18 @@ public sealed class TableColumnLayoutManager<TData>
 
         if (!hasMissingStarWidth)
         {
-            _pendingStarSizing = false;
-            return;
-        }
+            double currentTotal = fixedTotal;
+            foreach (var star in starColumns)
+            {
+                currentTotal += star.ExistingWidth;
+            }
 
-        var targetTotalWidth = Math.Max(configuredTotal.Value, fixedTotal);
+            if (Math.Abs(currentTotal - targetTotalWidth) <= 0.5)
+            {
+                _pendingStarSizing = false;
+                return;
+            }
+        }
 
         var starWidths = ComputeStarWidths(targetTotalWidth, fixedTotal, starColumns);
 
@@ -424,13 +468,13 @@ public sealed class TableColumnLayoutManager<TData>
 
         if (changed)
         {
-            ApplySizing(updatedItems, updatedStarWeights, targetTotalWidth);
+            ApplySizing(updatedItems, updatedStarWeights, targetTotalWidth, treatedAsExplicitTotal);
         }
 
         _pendingStarSizing = false;
     }
 
-    private void ApplySizing(Dictionary<string, double> items, Dictionary<string, double> starWeights, double? totalWidth)
+    private void ApplySizing(Dictionary<string, double> items, Dictionary<string, double> starWeights, double? totalWidth, bool totalWidthIsExplicit)
     {
         _isApplyingSizing = true;
         try
@@ -440,6 +484,8 @@ public sealed class TableColumnLayoutManager<TData>
                 new Dictionary<string, double>(starWeights),
                 totalWidth);
             _table.SetState(state => state with { ColumnSizing = newSizing }, updateRowModel: false);
+            _lastAppliedTotalWidth = totalWidth ?? double.NaN;
+            _lastTotalWidthWasAuto = totalWidth.HasValue ? !totalWidthIsExplicit : _lastTotalWidthWasAuto;
         }
         finally
         {
