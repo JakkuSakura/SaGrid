@@ -520,7 +520,15 @@ internal class SaGridHeaderRenderer<TData>
         {
             if (service != null)
             {
-                if (service.AutoSizeColumn(column.Id))
+                var neighbour = FindRightNeighbour(table, column);
+                var applied = service.AutoSizeColumnPair(column.Id, neighbour?.Id);
+
+                if (!applied)
+                {
+                    applied = service.AutoSizeColumn(column.Id);
+                }
+
+                if (applied)
                 {
                     _layoutManager?.Refresh();
                 }

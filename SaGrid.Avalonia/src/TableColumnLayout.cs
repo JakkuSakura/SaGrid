@@ -350,6 +350,32 @@ public sealed class TableColumnLayoutManager<TData>
             }
         }
 
+        var configuredTotal = sizingState.TotalWidth;
+        if (configuredTotal.HasValue)
+        {
+            double measuredTotal = 0;
+            var missingMeasurement = false;
+
+            foreach (var column in visibleColumns)
+            {
+                if (updatedItems.TryGetValue(column.Id, out var width))
+                {
+                    measuredTotal += width;
+                }
+                else
+                {
+                    missingMeasurement = true;
+                    break;
+                }
+            }
+
+            if (!missingMeasurement && Math.Abs(measuredTotal - configuredTotal.Value) <= 0.5)
+            {
+                _pendingStarSizing = false;
+                return;
+            }
+        }
+
         if (starColumns.Count == 0)
         {
             if (changed)
@@ -361,7 +387,6 @@ public sealed class TableColumnLayoutManager<TData>
             return;
         }
 
-        var configuredTotal = sizingState.TotalWidth;
         if (!configuredTotal.HasValue || configuredTotal.Value <= 0)
         {
             throw new InvalidOperationException("Star sized columns require ColumnSizingState.TotalWidth to be specified.");

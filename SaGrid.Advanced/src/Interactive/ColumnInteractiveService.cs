@@ -28,6 +28,7 @@ public class ColumnInteractiveService<TData>
     {
         _table = table;
         _eventService = eventService;
+        InitializeSizingState();
     }
 
     /// <summary>
@@ -125,29 +126,58 @@ public class ColumnInteractiveService<TData>
         try
         {
             var column = _table.GetColumn(columnId);
-            if (column == null || IsStarColumn(column))
+            if (column == null)
             {
                 return false;
             }
 
-            // Simplified auto-sizing: estimate based on column ID length and some content sampling
-            var headerWidth = Math.Max(100, columnId.Length * 8 + 40); // Rough estimate
-            
-            // Sample a few rows to get content width
-            var contentWidth = headerWidth;
-            var sampleRows = _table.RowModel.Rows.Take(10);
-            
-            foreach (var row in sampleRows)
+            var targetWidth = ComputeAutoSizeTarget(column);
+            if (!targetWidth.HasValue)
             {
-                var cellValue = row.GetValue<object>(columnId)?.ToString() ?? "";
-                var estimatedWidth = cellValue.Length * 8 + 20; // Rough text width estimate
-                contentWidth = Math.Max(contentWidth, estimatedWidth);
+                return false;
             }
 
-            // Cap the width to reasonable limits
-            var finalWidth = Math.Min(contentWidth, 400);
-            
-            return SetColumnWidth(columnId, finalWidth);
+            return SetColumnWidth(columnId, targetWidth.Value);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public bool AutoSizeColumnPair(string primaryColumnId, string? secondaryColumnId)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(secondaryColumnId))
+            {
+                return AutoSizeColumn(primaryColumnId);
+            }
+
+            if (_table.GetColumn(primaryColumnId) is not Column<TData> primary ||
+                _table.GetColumn(secondaryColumnId) is not Column<TData> secondary)
+            {
+                return false;
+            }
+
+            if (!primary.CanResize || !secondary.CanResize)
+            {
+                return false;
+            }
+
+            var targetWidth = ComputeAutoSizeTarget(primary);
+            if (!targetWidth.HasValue)
+            {
+                return false;
+            }
+
+            var delta = targetWidth.Value - primary.Size;
+            if (Math.Abs(delta) < 0.01)
+            {
+                return false;
+            }
+
+            return ResizeColumnPair(primaryColumnId, secondaryColumnId, delta);
         }
         catch
         {
@@ -497,31 +527,37 @@ public class ColumnInteractiveService<TData>
         var totalWidth = sizing.TotalWidth
             ?? _table.VisibleLeafColumns.Cast<Column<TData>>().Sum(c => c.Size);
 
-        var visibleColumns = _table.VisibleLeafColumns.Cast<Column<TData>>().ToList();
-        EnsureWidthEntries(widths, visibleColumns);
+    var visibleColumns = _table.VisibleLeafColumns.Cast<Column<TData>>().ToList();
+    EnsureWidthEntries(widths, visibleColumns);
 
-        var starColumns = visibleColumns.Where(IsStarColumn).ToList();
+    var starColumns = visibleColumns.Where(IsStarColumn).ToList();
+    BackfillMissingStarWidths(visibleColumns, starColumns, widths, starWeights, ref totalWidth);
 
         var primarySnapshot = CreateSnapshot(primary);
         var secondarySnapshot = CreateSnapshot(secondary);
 
         var changed = false;
+        var scenario = ResizeScenario.FixedFixed;
 
         if (!primarySnapshot.IsStar && !secondarySnapshot.IsStar)
         {
             changed = ApplyFixedFixedResize(primarySnapshot, secondarySnapshot, delta, widths);
+            scenario = ResizeScenario.FixedFixed;
         }
         else if (primarySnapshot.IsStar && secondarySnapshot.IsStar)
         {
             changed = ApplyStarStarResize(primarySnapshot, secondarySnapshot, delta, widths);
+            scenario = ResizeScenario.StarStar;
         }
         else if (!primarySnapshot.IsStar && secondarySnapshot.IsStar)
         {
             changed = ApplyFixedStarResize(primarySnapshot, secondarySnapshot, delta, widths);
+            scenario = ResizeScenario.FixedStar;
         }
         else
         {
             changed = ApplyStarFixedResize(primarySnapshot, secondarySnapshot, delta, widths);
+            scenario = ResizeScenario.StarFixed;
         }
 
         if (!changed)
@@ -529,7 +565,13 @@ public class ColumnInteractiveService<TData>
             return false;
         }
 
-        NormalizeStarWeights(widths, starWeights, starColumns);
+        NormalizeStarWeights(widths, starWeights, starColumns, scenario, primarySnapshot, secondarySnapshot);
+
+        var capturedTotalWidth = widths.Values.Sum();
+        if (capturedTotalWidth > 0)
+        {
+            totalWidth = capturedTotalWidth;
+        }
 
         var newState = new ColumnSizingState(widths, starWeights, totalWidth);
         _table.SetState(state => state with { ColumnSizing = newState });
@@ -639,6 +681,90 @@ public class ColumnInteractiveService<TData>
         return true;
     }
 
+    private void InitializeSizingState()
+    {
+        var sizing = _table.State.ColumnSizing;
+        if (sizing == null)
+        {
+            return;
+        }
+
+        var visibleColumns = _table.VisibleLeafColumns.Cast<Column<TData>>().ToList();
+        if (visibleColumns.Count == 0 || !visibleColumns.Any(IsStarColumn))
+        {
+            return;
+        }
+
+        var widths = new Dictionary<string, double>(sizing.Items);
+        var starWeights = new Dictionary<string, double>(sizing.StarWeights);
+        var totalWidth = sizing.TotalWidth ?? 0;
+
+        var previousWidths = new Dictionary<string, double>(widths);
+        var previousWeights = new Dictionary<string, double>(starWeights);
+        var previousTotal = sizing.TotalWidth;
+
+        EnsureWidthEntries(widths, visibleColumns);
+
+        var starColumns = visibleColumns.Where(IsStarColumn).ToList();
+        BackfillMissingStarWidths(visibleColumns, starColumns, widths, starWeights, ref totalWidth);
+
+        var normalizedTotal = totalWidth > 0 ? totalWidth : sizing.TotalWidth;
+
+        if (!AreDictionariesEqual(previousWidths, widths) ||
+            !AreDictionariesEqual(previousWeights, starWeights) ||
+            !TotalsEqual(previousTotal, normalizedTotal))
+        {
+            var updatedState = new ColumnSizingState(widths, starWeights, normalizedTotal);
+            _table.SetState(state => state with { ColumnSizing = updatedState }, updateRowModel: false);
+        }
+    }
+
+    private static bool TotalsEqual(double? original, double? current)
+    {
+        if (!original.HasValue && !current.HasValue)
+        {
+            return true;
+        }
+
+        if (!original.HasValue || !current.HasValue)
+        {
+            return false;
+        }
+
+        return Math.Abs(original.Value - current.Value) <= 0.5;
+    }
+
+    private static bool AreDictionariesEqual(IReadOnlyDictionary<string, double> left, IReadOnlyDictionary<string, double> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        foreach (var (key, value) in left)
+        {
+            if (!right.TryGetValue(key, out var candidate))
+            {
+                return false;
+            }
+
+            if (Math.Abs(candidate - value) > 0.5)
+            {
+                return false;
+            }
+        }
+
+        foreach (var key in right.Keys)
+        {
+            if (!left.ContainsKey(key))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private void EnsureWidthEntries(Dictionary<string, double> widths, IReadOnlyList<Column<TData>> columns)
     {
         foreach (var column in columns)
@@ -653,7 +779,10 @@ public class ColumnInteractiveService<TData>
     private void NormalizeStarWeights(
         Dictionary<string, double> widths,
         Dictionary<string, double> starWeights,
-        IReadOnlyList<Column<TData>> starColumns)
+        IReadOnlyList<Column<TData>> starColumns,
+        ResizeScenario scenario,
+        ColumnSnapshot primary,
+        ColumnSnapshot secondary)
     {
         var starIds = new HashSet<string>(starColumns.Select(c => c.Id));
 
@@ -674,11 +803,155 @@ public class ColumnInteractiveService<TData>
         {
             var (min, _) = GetColumnMinMax(column);
             var width = widths.TryGetValue(column.Id, out var stored)
-                ? Math.Max(stored, min)
-                : Math.Max(column.Size, min);
+                ? stored
+                : column.Size;
 
-            starWeights[column.Id] = width;
+            var clamped = Math.Max(width, min);
+            widths[column.Id] = clamped;
+
+            var extra = Math.Max(clamped - min, 0);
+            var definition = column.ColumnDef.Width;
+            var fallback = definition.HasValue && definition.Value.Mode == ColumnWidthMode.Star
+                ? Math.Max(definition.Value.Value, 0.0001)
+                : 1.0;
+
+            starWeights[column.Id] = extra > 0.0001 ? extra : fallback;
         }
+    }
+
+    private enum ResizeScenario
+    {
+        FixedFixed,
+        StarStar,
+        FixedStar,
+        StarFixed
+    }
+
+    private void BackfillMissingStarWidths(
+        IReadOnlyList<Column<TData>> visibleColumns,
+        IReadOnlyList<Column<TData>> starColumns,
+        Dictionary<string, double> widths,
+        Dictionary<string, double> starWeights,
+        ref double totalWidth)
+    {
+        if (starColumns.Count == 0)
+        {
+            totalWidth = totalWidth > 0 ? totalWidth : widths.Values.Sum();
+            return;
+        }
+
+        var missingStars = starColumns.Where(c =>
+            !widths.ContainsKey(c.Id) ||
+            !starWeights.TryGetValue(c.Id, out var storedWeight) || storedWeight <= 0.0001).ToList();
+        if (missingStars.Count == 0)
+        {
+            totalWidth = totalWidth > 0 ? totalWidth : widths.Values.Sum();
+            return;
+        }
+
+        double fixedTotal = 0;
+        double knownStarTotal = 0;
+
+        foreach (var column in visibleColumns)
+        {
+            if (IsStarColumn(column))
+            {
+                if (starWeights.TryGetValue(column.Id, out var storedWeight) && storedWeight > 0.0001 &&
+                    widths.TryGetValue(column.Id, out var starWidth))
+                {
+                    knownStarTotal += starWidth;
+                }
+            }
+            else if (widths.TryGetValue(column.Id, out var fixedWidth))
+            {
+                fixedTotal += fixedWidth;
+            }
+        }
+
+        double configuredTotal = totalWidth;
+        if (configuredTotal <= 0)
+        {
+            configuredTotal = fixedTotal + knownStarTotal;
+        }
+
+        var minSum = missingStars.Sum(c => GetColumnMinMax(c).Min);
+        var availableForStars = Math.Max(configuredTotal - fixedTotal, 0);
+        var remainingForMissing = Math.Max(availableForStars - knownStarTotal, 0);
+        var extraSpace = Math.Max(remainingForMissing - minSum, 0);
+
+        var totalWeight = missingStars.Sum(c =>
+        {
+            if (starWeights.TryGetValue(c.Id, out var stored) && stored > 0.0001)
+            {
+                return stored;
+            }
+
+            var definition = c.ColumnDef.Width;
+            if (definition.HasValue && definition.Value.Mode == ColumnWidthMode.Star && definition.Value.Value > 0.0001)
+            {
+                return definition.Value.Value;
+            }
+
+            return 1.0;
+        });
+
+        if (totalWeight <= 0.0001)
+        {
+            totalWeight = missingStars.Count;
+        }
+
+        foreach (var column in missingStars)
+        {
+            var (min, max) = GetColumnMinMax(column);
+
+            double weight = 1.0;
+            if (starWeights.TryGetValue(column.Id, out var storedWeight) && storedWeight > 0.0001)
+            {
+                weight = storedWeight;
+            }
+            else if (column.ColumnDef.Width.HasValue && column.ColumnDef.Width.Value.Mode == ColumnWidthMode.Star)
+            {
+                weight = Math.Max(column.ColumnDef.Width.Value.Value, 0.0001);
+            }
+
+            var share = extraSpace > 0 ? (weight / totalWeight) * extraSpace : 0;
+            var width = Math.Clamp(min + share, min, max);
+
+            widths[column.Id] = width;
+            starWeights[column.Id] = Math.Max(width - min, 0.0001);
+            knownStarTotal += width;
+        }
+
+        if (configuredTotal <= 0)
+        {
+            totalWidth = fixedTotal + knownStarTotal;
+        }
+    }
+
+    private double? ComputeAutoSizeTarget(Column<TData> column)
+    {
+        if (column == null || IsStarColumn(column))
+        {
+            return null;
+        }
+
+        var columnId = column.Id;
+
+        var headerWidth = Math.Max(100, columnId.Length * 8 + 40);
+
+        var contentWidth = headerWidth;
+        var sampleRows = _table.RowModel.Rows.Take(10);
+
+        foreach (var row in sampleRows)
+        {
+            var cellValue = row.GetValue<object>(columnId)?.ToString() ?? string.Empty;
+            var estimatedWidth = cellValue.Length * 8 + 20;
+            contentWidth = Math.Max(contentWidth, estimatedWidth);
+        }
+
+        var capped = Math.Min(contentWidth, 400);
+        var (minWidth, maxWidth) = GetColumnMinMax(column);
+        return Math.Clamp(capped, minWidth, maxWidth);
     }
     private (double Min, double Max) GetColumnMinMax(Column<TData> column)
     {
