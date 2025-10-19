@@ -930,7 +930,7 @@ public class ColumnInteractiveService<TData>
 
     private double? ComputeAutoSizeTarget(Column<TData> column)
     {
-        if (column == null || IsStarColumn(column))
+        if (column == null)
         {
             return null;
         }
