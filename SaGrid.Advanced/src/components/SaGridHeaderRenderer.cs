@@ -394,9 +394,24 @@ internal class SaGridHeaderRenderer<TData>
 
         bool isDragging = false;
         double lastPointerX = 0;
+        double pointerPressX = 0;
+        double primaryStartWidth = column.Size;
         Column<TData>? neighbourColumn = null;
         IDisposable? resizeScope = null;
         Visual? dragReferenceVisual = null;
+
+        static (double Min, double Max) GetColumnBounds(Column<TData> targetColumn)
+        {
+            var min = targetColumn.ColumnDef.MinSize.HasValue
+                ? Math.Max(targetColumn.ColumnDef.MinSize.Value, 1)
+                : 40;
+
+            var max = targetColumn.ColumnDef.MaxSize.HasValue
+                ? Math.Max(targetColumn.ColumnDef.MaxSize.Value, min)
+                : double.PositiveInfinity;
+
+            return (min, max);
+        }
 
         void ResetLine()
         {
@@ -431,7 +446,9 @@ internal class SaGridHeaderRenderer<TData>
 
             dragReferenceVisual = (headerBorder.GetVisualRoot() as Visual) ?? rail;
             lastPointerX = e.GetPosition(dragReferenceVisual).X;
+            pointerPressX = lastPointerX;
             neighbourColumn = FindRightNeighbour(table, column);
+            primaryStartWidth = column.Size;
 
             if (neighbourColumn == null)
             {
@@ -454,13 +471,21 @@ internal class SaGridHeaderRenderer<TData>
 
             var visual = dragReferenceVisual ?? (headerBorder.GetVisualRoot() as Visual) ?? rail;
             var currentX = e.GetPosition(visual).X;
-            var delta = currentX - lastPointerX;
-            if (Math.Abs(delta) < 0.1)
+            var deltaSinceLast = currentX - lastPointerX;
+            if (Math.Abs(deltaSinceLast) < 0.1)
             {
                 return;
             }
 
             lastPointerX = currentX;
+            var targetWidth = primaryStartWidth + (currentX - pointerPressX);
+            var (minWidth, maxWidth) = GetColumnBounds(column);
+            var clampedTarget = Math.Clamp(targetWidth, minWidth, maxWidth);
+            var delta = clampedTarget - column.Size;
+            if (Math.Abs(delta) < 0.01)
+            {
+                return;
+            }
 
             var applied = false;
 
@@ -471,6 +496,8 @@ internal class SaGridHeaderRenderer<TData>
 
             if (applied)
             {
+                primaryStartWidth = column.Size;
+                pointerPressX = currentX;
                 _layoutManager?.Refresh();
             }
 
@@ -605,12 +632,13 @@ internal class SaGridHeaderRenderer<TData>
         foreach (var column in table.VisibleLeafColumns.Cast<Column<TData>>())
         {
             var textBox = CreateFilterTextBox(host, table, column);
-            var border = new Border()
-                .BorderThickness(0, 0, 1, 1)
-                .BorderBrush(Brushes.LightGray)
-                .Background(Brushes.White)
-                .Padding(new Thickness(2))
-                .Child(textBox);
+        var border = new Border()
+            .BorderThickness(0, 0, 1, 1)
+            .BorderBrush(Brushes.LightGray)
+            .Background(Brushes.White)
+            .Padding(new Thickness(2))
+            .ClipToBounds(true)
+            .Child(textBox);
 
             ColumnLayoutPanel.SetColumnId(border, column.Id);
             panel.Children.Add(border);
@@ -626,7 +654,6 @@ internal class SaGridHeaderRenderer<TData>
     {
         var textBox = new TextBox
         {
-            Watermark = $"Filter {column.Id}...",
             Width = double.NaN,
             Height = double.NaN,
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -639,6 +666,7 @@ internal class SaGridHeaderRenderer<TData>
             BorderThickness = new Thickness(1),
             BorderBrush = Brushes.Gray,
             Background = Brushes.White,
+            MinWidth = 0,
             TabIndex = 0,
             IsTabStop = true,
             Tag = column.Id
