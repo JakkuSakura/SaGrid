@@ -516,34 +516,6 @@ internal class SaGridHeaderRenderer<TData>
             CompleteResizeSession();
         };
 
-        rail.DoubleTapped += (_, e) =>
-        {
-            if (service != null)
-            {
-                var neighbour = FindRightNeighbour(table, column);
-                var applied = service.AutoSizeColumnPair(column.Id, neighbour?.Id);
-
-                if (!applied)
-                {
-                    applied = service.AutoSizeColumn(column.Id);
-                }
-
-                if (applied)
-                {
-                    _layoutManager?.Refresh();
-                }
-            }
-            else
-            {
-                column.ResetSize();
-                _layoutManager?.Refresh();
-            }
-
-            CompleteResizeSession();
-            ResetLine();
-            e.Handled = true;
-        };
-
         return rail;
     }
 
