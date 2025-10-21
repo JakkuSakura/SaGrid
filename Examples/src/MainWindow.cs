@@ -106,7 +106,7 @@ public class MainWindow : Window
         var hostScrollViewer = new ScrollViewer
         {
             Content = _exampleHost,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
 
