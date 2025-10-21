@@ -8,7 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
-using SaGrid;
+using SaGrid.Advanced;
 
 namespace SaGrid.Advanced.Modules.StatusBar;
 

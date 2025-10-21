@@ -6,7 +6,7 @@ using SaGrid.Advanced.Events;
 using SaGrid.Advanced.Interfaces;
 using SaGrid.Advanced.RowModel;
 using SaGrid.Core;
-using SaGrid;
+using SaGrid.Advanced;
 
 namespace SaGrid.Advanced.Modules.RowGrouping;
 

@@ -7,7 +7,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using SaGrid.Advanced.Interfaces;
-using SaGrid;
+using SaGrid.Advanced;
 using SaGrid.Core;
 
 namespace SaGrid.Advanced.Modules.Aggregation;

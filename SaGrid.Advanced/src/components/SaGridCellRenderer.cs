@@ -7,15 +7,15 @@ using Avalonia.Layout;
 using Avalonia.Markup.Declarative;
 using Avalonia.Media;
 using Avalonia.VisualTree;
-using SaGrid.Advanced.Components;
 using SaGrid.Advanced.Interfaces;
 using SaGrid.Advanced.Modules.Editing;
+using SaGrid.Advanced.Utils;
 using SaGrid.Core;
 using SaGrid.Core.Models;
 using SolidAvalonia;
 using static SolidAvalonia.Solid;
 
-namespace SaGrid;
+namespace SaGrid.Advanced.Components;
 
 internal interface IReusableCellVisual<TData>
 {

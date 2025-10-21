@@ -5,13 +5,12 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
-using SaGrid.Advanced.Components;
 using SaGrid.Advanced.Interfaces;
 using SaGrid.Avalonia;
 using SaGrid.Core;
 using SaGrid.Core.Models;
 
-namespace SaGrid;
+namespace SaGrid.Advanced.Components;
 
 internal interface ISelectionAwareRowsControl
 {

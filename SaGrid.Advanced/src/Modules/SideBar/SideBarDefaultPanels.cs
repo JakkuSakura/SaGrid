@@ -6,7 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
-using SaGrid;
+using SaGrid.Advanced;
 using SaGrid.Core;
 
 namespace SaGrid.Advanced.Modules.SideBar;

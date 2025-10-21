@@ -2,12 +2,11 @@ using System;
 using System.Linq;
 using System.Reflection;
 using Avalonia.Controls;
-using SaGrid;
+using SaGrid.Advanced;
 using SaGrid.Core;
 using Tests.TestData;
 using Xunit;
 using FluentAssertions;
-using SaGrid.Advanced;
 
 namespace Tests.Features;
 
@@ -32,7 +31,7 @@ public class ClientStarterRenderingTests
         var grid = new SaGrid<TestPerson>(options);
 
         var rendererType = typeof(SaGrid<TestPerson>).Assembly
-            .GetType("SaGrid.SaGridBodyRenderer`1")!
+            .GetType("SaGrid.Advanced.Components.SaGridBodyRenderer`1")!
             .MakeGenericType(typeof(TestPerson));
         var renderer = Activator.CreateInstance(rendererType)!;
         var createBody = rendererType.GetMethod("CreateBody", BindingFlags.Public | BindingFlags.Instance)!;
@@ -71,7 +70,7 @@ public class ClientStarterRenderingTests
         var grid = new SaGrid<TestPerson>(options);
 
         var rendererType = typeof(SaGrid<TestPerson>).Assembly
-            .GetType("SaGrid.SaGridBodyRenderer`1")!
+            .GetType("SaGrid.Advanced.Components.SaGridBodyRenderer`1")!
             .MakeGenericType(typeof(TestPerson));
         var renderer = Activator.CreateInstance(rendererType)!;
         var createBody = rendererType.GetMethod("CreateBody", BindingFlags.Public | BindingFlags.Instance)!;

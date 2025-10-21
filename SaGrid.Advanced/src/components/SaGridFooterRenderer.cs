@@ -3,12 +3,11 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Markup.Declarative;
-using SaGrid.Advanced.Components;
 using SaGrid.Core.Models;
 using SolidAvalonia;
 using static SolidAvalonia.Solid;
 
-namespace SaGrid;
+namespace SaGrid.Advanced.Components;
 
 internal class SaGridFooterRenderer<TData>
 {

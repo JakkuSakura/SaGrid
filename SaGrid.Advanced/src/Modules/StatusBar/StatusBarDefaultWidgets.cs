@@ -8,7 +8,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using SaGrid;
+using SaGrid.Advanced;
 using SaGrid.Advanced.Events;
 using SaGrid.Advanced.Interfaces;
 

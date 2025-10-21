@@ -1,4 +1,4 @@
-using SaGrid;
+using SaGrid.Advanced;
 using SaGrid.Advanced.Modules.Analytics;
 
 namespace SaGrid.Advanced.Interfaces;

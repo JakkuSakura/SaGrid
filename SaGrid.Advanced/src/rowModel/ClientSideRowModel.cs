@@ -5,7 +5,7 @@ using System.Linq;
 using SaGrid.Advanced.Events;
 using SaGrid.Advanced.Interfaces;
 using SaGrid.Core;
-using SaGrid;
+using SaGrid.Advanced;
 using SaGrid.Core.Models;
 
 namespace SaGrid.Advanced.RowModel;

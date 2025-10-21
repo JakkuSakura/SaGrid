@@ -10,14 +10,15 @@ using Avalonia.Media;
 using Avalonia.Controls.Primitives;
 using Avalonia.VisualTree;
 using SaGrid.Avalonia;
-using SaGrid.Advanced.Components;
+using SaGrid.Advanced.Behaviors;
 using SaGrid.Advanced.DragDrop;
 using SaGrid.Advanced.Interactive;
+using SaGrid.Advanced.Utils;
 using SaGrid.Core;
 using SaGrid.Core.Models;
 using static SolidAvalonia.Solid;
 
-namespace SaGrid;
+namespace SaGrid.Advanced.Components;
 
 internal class SaGridHeaderRenderer<TData>
 {
@@ -610,7 +611,7 @@ internal class SaGridHeaderRenderer<TData>
 
         foreach (var modifier in modifiers)
         {
-            var behavior = new SaGrid.Behaviors.ButtonClickEventTriggerBehavior
+            var behavior = new ButtonClickEventTriggerBehavior
             {
                 RequiredModifiers = modifier,
                 Action = () => ApplySorting(true)

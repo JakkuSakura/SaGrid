@@ -5,7 +5,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using Avalonia.Controls;
-using SaGrid;
+using SaGrid.Advanced;
 
 namespace SaGrid.Advanced.Modules.StatusBar;
 

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SaGrid.Core;
 
-namespace SaGrid;
+namespace SaGrid.Advanced.Utils;
 
 internal static class SaGridContentHelper<TData>
 {

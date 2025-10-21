@@ -11,7 +11,6 @@ using Avalonia.Markup.Declarative;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using SaGrid.Advanced.Components;
 using SaGrid.Advanced.DragDrop;
 using SaGrid.Avalonia;
 using SaGrid.Core;
@@ -22,7 +21,7 @@ using static SolidAvalonia.Solid;
 
 using GridControl = Avalonia.Controls.Grid;
 
-namespace SaGrid;
+namespace SaGrid.Advanced.Components;
 
 public class SaGridComponent<TData> : SolidTable<TData>
 {

@@ -7,7 +7,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
-using SaGrid;
+using SaGrid.Advanced;
 using SaGrid.Advanced.Events;
 using SaGrid.Advanced.Interfaces;
 using SaGrid.Core;

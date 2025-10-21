@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Examples.Models;
-using SaGrid;
 using SaGrid.Advanced;
 using SaGrid.Core;
 

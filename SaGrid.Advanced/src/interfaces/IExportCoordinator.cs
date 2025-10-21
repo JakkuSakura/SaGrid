@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
 using Avalonia.Controls;
-using SaGrid;
+using SaGrid.Advanced;
 using SaGrid.Advanced.Modules.Export;
 
 namespace SaGrid.Advanced.Interfaces;

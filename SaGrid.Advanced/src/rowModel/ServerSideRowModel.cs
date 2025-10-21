@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SaGrid.Advanced.Interfaces;
 using SaGrid.Core;
-using SaGrid;
+using SaGrid.Advanced;
 
 namespace SaGrid.Advanced.RowModel;
 

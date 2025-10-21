@@ -4,7 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 
-namespace SaGrid.Behaviors;
+namespace SaGrid.Advanced.Behaviors;
 
 // Code-based equivalent to XAML Interaction behavior:
 // <ic:ButtonClickEventTriggerBehavior KeyModifiers="Control,Shift,Command,Option" />
@@ -35,4 +35,3 @@ public class ButtonClickEventTriggerBehavior
         }
     }
 }
-
