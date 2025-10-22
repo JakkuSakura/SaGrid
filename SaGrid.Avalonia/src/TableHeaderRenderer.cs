@@ -19,7 +19,7 @@ public class TableHeaderRenderer<TData>
 
     public Control CreateHeader(Table<TData> table)
     {
-        var layoutManager = new TableColumnLayoutManager<TData>(table);
+        var layoutManager = TableColumnLayoutManagerRegistry.GetOrCreate(table);
         return CreateHeader(table, layoutManager);
     }
 

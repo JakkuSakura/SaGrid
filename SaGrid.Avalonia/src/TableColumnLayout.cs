@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.VisualTree;
@@ -93,6 +94,25 @@ public sealed class TableColumnLayoutSnapshot
     public static TableColumnLayoutSnapshot From<TData>(Table<TData> table)
     {
         return new TableColumnLayoutSnapshot(TableColumnLayout.MeasureColumns(table));
+    }
+}
+
+internal static class TableColumnLayoutManagerRegistry
+{
+    private static readonly ConditionalWeakTable<object, object> Managers = new();
+
+    public static TableColumnLayoutManager<TData> GetOrCreate<TData>(Table<TData> table)
+    {
+        if (table == null) throw new ArgumentNullException(nameof(table));
+
+        static object Create(object key) => new TableColumnLayoutManager<TData>((Table<TData>)key);
+        return (TableColumnLayoutManager<TData>)Managers.GetValue(table, Create);
+    }
+
+    public static void Release<TData>(Table<TData> table)
+    {
+        if (table == null) throw new ArgumentNullException(nameof(table));
+        Managers.Remove(table);
     }
 }
 

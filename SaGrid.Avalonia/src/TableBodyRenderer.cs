@@ -9,7 +9,7 @@ public class TableBodyRenderer<TData>
 
     public Control CreateBody(Table<TData> table)
     {
-        var layoutManager = new TableColumnLayoutManager<TData>(table);
+        var layoutManager = TableColumnLayoutManagerRegistry.GetOrCreate(table);
         return CreateBody(table, layoutManager);
     }
 
