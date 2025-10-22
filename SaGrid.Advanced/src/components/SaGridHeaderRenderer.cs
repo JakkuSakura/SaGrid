@@ -25,8 +25,8 @@ internal class SaGridHeaderRenderer<TData>
     private const double HeaderHeight = 40;
     private const double ResizeHandleWidth = 6;
 
-    private readonly Action<TextBox>? _onFilterFocus;
-    private readonly Action<string, TextBox>? _onFilterTextBoxCreated;
+    private readonly Action<Control>? _onFilterFocus;
+    private readonly Action<string, ColumnFilterRegistration>? _onFilterControlCreated;
     private DragDropManager<TData>? _dragDropManager;
     private ColumnInteractiveService<TData>? _columnService;
     private readonly List<IDragSource> _activeDragSources = new();
@@ -55,10 +55,10 @@ internal class SaGridHeaderRenderer<TData>
         return column.ColumnDef.Width?.Mode == ColumnWidthMode.Star;
     }
 
-    public SaGridHeaderRenderer(Action<TextBox>? onFilterFocus = null, Action<string, TextBox>? onFilterTextBoxCreated = null)
+    public SaGridHeaderRenderer(Action<Control>? onFilterFocus = null, Action<string, ColumnFilterRegistration>? onFilterControlCreated = null)
     {
         _onFilterFocus = onFilterFocus;
-        _onFilterTextBoxCreated = onFilterTextBoxCreated;
+        _onFilterControlCreated = onFilterControlCreated;
     }
 
     public void EnableInteractivity(DragDropManager<TData> dragDropManager, ColumnInteractiveService<TData> columnService)
@@ -632,26 +632,100 @@ internal class SaGridHeaderRenderer<TData>
 
         foreach (var column in table.VisibleLeafColumns.Cast<Column<TData>>())
         {
-            var textBox = CreateFilterTextBox(host, table, column);
-        var border = new Border()
-            .BorderThickness(0, 0, 1, 1)
-            .BorderBrush(Brushes.LightGray)
-            .Background(Brushes.White)
-            .Padding(new Thickness(2))
-            .ClipToBounds(true)
-            .Child(textBox);
+            var registration = CreateFilterControl(host, table, column);
+            AttachFocusNotification(registration.Control);
+
+            var border = new Border
+            {
+                BorderThickness = new Thickness(0, 0, 1, 1),
+                BorderBrush = Brushes.LightGray,
+                Background = Brushes.White,
+                Padding = new Thickness(2),
+                ClipToBounds = true,
+                Child = registration.Control
+            };
 
             ColumnLayoutPanel.SetColumnId(border, column.Id);
             panel.Children.Add(border);
+
+            _onFilterControlCreated?.Invoke(column.Id, registration);
         }
 
-        return new Border()
-            .BorderThickness(new Thickness(0, 0, 0, 1))
-            .BorderBrush(Brushes.LightGray)
-            .Child(panel);
+        return new Border
+        {
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            BorderBrush = Brushes.LightGray,
+            Child = panel
+        };
     }
 
-    private TextBox CreateFilterTextBox(ISaGridComponentHost<TData> host, Table<TData> table, Column<TData> column)
+    private ColumnFilterRegistration CreateFilterControl(
+        ISaGridComponentHost<TData> host,
+        Table<TData> table,
+        Column<TData> column)
+    {
+        var kind = ResolveFilterKind(table, column);
+
+        if (kind == ColumnFilterKind.Custom)
+        {
+            var registration = TryCreateCustomFilter(host, table, column);
+            if (registration != null)
+            {
+                return registration;
+            }
+
+            kind = ColumnFilterKind.Text;
+        }
+
+        return kind switch
+        {
+            ColumnFilterKind.BooleanTriState => CreateBooleanFilter(host, table, column),
+            _ => CreateTextFilter(host, table, column)
+        };
+    }
+
+    private ColumnFilterKind ResolveFilterKind(Table<TData> table, Column<TData> column)
+    {
+        if (column.ColumnDef.Meta != null &&
+            column.ColumnDef.Meta.TryGetValue(ColumnFilterMetaKeys.FilterKind, out var value) &&
+            value is ColumnFilterKind kind)
+        {
+            return kind;
+        }
+
+        // Attempt a simple heuristic: use boolean filter when sample value is bool
+        var sampleValue = table.PreFilteredRowModel.Rows
+            .Select(row => row.GetCell(column.Id).Value)
+            .FirstOrDefault(cellValue => cellValue != null);
+
+        return sampleValue is bool ? ColumnFilterKind.BooleanTriState : ColumnFilterKind.Text;
+    }
+
+    private ColumnFilterRegistration? TryCreateCustomFilter(
+        ISaGridComponentHost<TData> host,
+        Table<TData> table,
+        Column<TData> column)
+    {
+        if (column.ColumnDef.Meta == null ||
+            !column.ColumnDef.Meta.TryGetValue(ColumnFilterMetaKeys.FilterFactory, out var factoryObj))
+        {
+            return null;
+        }
+
+        if (factoryObj is not ColumnFilterFactory<TData> factory)
+        {
+            return null;
+        }
+
+        var context = new ColumnFilterContext<TData>(host, table, column);
+        var registration = factory(context);
+        return registration;
+    }
+
+    private ColumnFilterRegistration CreateTextFilter(
+        ISaGridComponentHost<TData> host,
+        Table<TData> table,
+        Column<TData> column)
     {
         var textBox = new TextBox
         {
@@ -660,7 +734,7 @@ internal class SaGridHeaderRenderer<TData>
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
             Focusable = true,
-            IsEnabled = true,
+            IsEnabled = column.CanFilter,
             AcceptsReturn = false,
             AcceptsTab = false,
             Margin = new Thickness(4),
@@ -669,61 +743,107 @@ internal class SaGridHeaderRenderer<TData>
             Background = Brushes.White,
             MinWidth = 0,
             TabIndex = 0,
-            IsTabStop = true,
-            Tag = column.Id
+            IsTabStop = true
         };
 
-        _onFilterTextBoxCreated?.Invoke(column.Id, textBox);
-
-        textBox.GotFocus += (_, args) =>
+        textBox.PointerPressed += (_, _) =>
         {
-            if (args.Source is TextBox tb)
+            if (!textBox.IsFocused)
             {
-                _onFilterFocus?.Invoke(tb);
+                textBox.Focus();
             }
         };
 
-        textBox.PointerPressed += (sender, _) =>
+        textBox.TextChanged += (_, _) =>
         {
-            if (sender is TextBox tb && !tb.IsFocused)
+            var newValue = string.IsNullOrWhiteSpace(textBox.Text) ? null : textBox.Text;
+            var currentValue = table.State.ColumnFilters?.Filters
+                .FirstOrDefault(f => f.Id == column.Id)?.Value;
+
+            var equals = (currentValue == null && newValue == null) ||
+                         (currentValue != null && newValue != null &&
+                          string.Equals(currentValue.ToString(), newValue.ToString(), StringComparison.Ordinal));
+
+            if (!equals)
             {
-                tb.Focus();
+                host.SetColumnFilter(column.Id, newValue);
             }
         };
 
-        textBox.TextChanged += (sender, _) =>
-        {
-            if (sender is TextBox tb)
+        return new ColumnFilterRegistration(
+            textBox,
+            value =>
             {
-                var newValue = string.IsNullOrWhiteSpace(tb.Text) ? (object?)null : tb.Text;
-                var currentValue = table.State.ColumnFilters?.Filters
-                    .FirstOrDefault(f => f.Id == column.Id)?.Value;
-
-                var equals = (currentValue == null && newValue == null) ||
-                             (currentValue != null && newValue != null &&
-                              string.Equals(currentValue.ToString(), newValue.ToString(), StringComparison.Ordinal));
-
-                if (!equals)
+                var expected = value?.ToString() ?? string.Empty;
+                if (!string.Equals(textBox.Text, expected, StringComparison.Ordinal))
                 {
-                    host.SetColumnFilter(column.Id, newValue);
+                    textBox.Text = expected;
                 }
-            }
+            },
+            () => textBox.IsKeyboardFocusWithin);
+    }
+
+    private ColumnFilterRegistration CreateBooleanFilter(
+        ISaGridComponentHost<TData> host,
+        Table<TData> table,
+        Column<TData> column)
+    {
+        var checkBox = new CheckBox
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsThreeState = true,
+            IsEnabled = column.CanFilter
         };
 
-        var currentFilterValue = table.State.ColumnFilters?.Filters.FirstOrDefault(f => f.Id == column.Id)?.Value;
-        if (currentFilterValue is string textValue)
+        var isUpdating = false;
+
+        checkBox.PropertyChanged += (_, args) =>
         {
-            if (!string.Equals(textBox.Text, textValue, StringComparison.Ordinal))
+            if (args.Property != ToggleButton.IsCheckedProperty || isUpdating)
             {
-                textBox.Text = textValue;
+                return;
             }
-        }
-        else
+
+            var value = checkBox.IsChecked switch
+            {
+                true => (object?)true,
+                false => false,
+                _ => null
+            };
+
+            host.SetColumnFilter(column.Id, value);
+        };
+
+        return new ColumnFilterRegistration(
+            checkBox,
+            value =>
+            {
+                var desired = value switch
+                {
+                    bool boolValue => (bool?)boolValue,
+                    string stringValue when bool.TryParse(stringValue, out var parsed) => parsed,
+                    _ => (bool?)null
+                };
+
+                if (checkBox.IsChecked != desired)
+                {
+                    isUpdating = true;
+                    checkBox.IsChecked = desired;
+                    isUpdating = false;
+                }
+            },
+            () => checkBox.IsFocused || checkBox.IsPointerOver);
+    }
+
+    private void AttachFocusNotification(Control control)
+    {
+        if (_onFilterFocus == null)
         {
-            textBox.Text = string.Empty;
+            return;
         }
 
-        return textBox;
+        control.GotFocus += (_, _) => _onFilterFocus(control);
     }
 
     private Control CreateHeaderLabel(Table<TData> table, Column<TData> column, IHeader<TData> header)

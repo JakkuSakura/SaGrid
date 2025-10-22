@@ -279,7 +279,7 @@ var paginationControls = table.PaginationControls();
 - 🔄 **Advanced filtering** (faceted, fuzzy, multi-column)
 - 🔄 **Grouping & aggregation** for analytics
 - 🔄 **Row expansion** with virtualization
-- 🔄 **Column resizing** & drag-to-reorder
+- ✅ **Column resizing** & drag-to-reorder (shipped!)
 
 ### ⏳ Phase 3: Platform Expansion (Coming Soon)
 - ⏳ **WPF & MAUI** adapters for maximum reach

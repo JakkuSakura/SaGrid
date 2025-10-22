@@ -33,7 +33,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
     private StackPanel? _headerContainer;
     private ContentControl? _bodyHost;
     private ContentControl? _footerHost;
-    private readonly Dictionary<string, TextBox> _filterTextBoxes = new();
+    private readonly Dictionary<string, ColumnFilterRegistration> _filterControls = new();
     private int _themeTick;
     private string _headerStructureVersion = string.Empty;
     private string _filterVersion = string.Empty;
@@ -186,7 +186,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
 
         _headerRenderer = new SaGridHeaderRenderer<TData>(
             _ => { },
-            (columnId, textBox) => { _filterTextBoxes[columnId] = textBox; });
+            (columnId, registration) => { _filterControls[columnId] = registration; });
         _bodyRenderer = new SaGridBodyRenderer<TData>();
         _footerRenderer = new SaGridFooterRenderer<TData>();
     }
@@ -383,7 +383,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
         else if (!string.Equals(newFilterVersion, _filterVersion, StringComparison.Ordinal))
         {
             _filterVersion = newFilterVersion;
-            RefreshFilterTextBoxes();
+            RefreshFilterControls();
         }
 
         if (!string.Equals(newBodyVersion, _bodyStructureVersion, StringComparison.Ordinal))
@@ -453,6 +453,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
         EnsureDragDropInfrastructure();
 
         _layoutManager ??= new TableColumnLayoutManager<TData>(Table);
+        _filterControls.Clear();
         _layoutManager.Refresh();
 
         var header = _headerRenderer.CreateHeader(
@@ -474,38 +475,26 @@ public class SaGridComponent<TData> : SolidTable<TData>
         _headerContainer.Children.Clear();
         _headerContainer.Children.Add(header);
 
-        _filterTextBoxes.Clear();
-        foreach (var textBox in header.GetVisualDescendants().OfType<TextBox>())
-        {
-            if (textBox.Tag is string columnId)
-            {
-                _filterTextBoxes[columnId] = textBox;
-            }
-        }
-
         _headerStructureVersion = ComputeHeaderStructureVersion();
         _filterVersion = ComputeFilterVersion();
         _columnWidthVersion = ComputeColumnWidthVersion();
-        RefreshFilterTextBoxes(force: true);
+        RefreshFilterControls(force: true);
     }
 
-    private void RefreshFilterTextBoxes(bool force = false)
+    private void RefreshFilterControls(bool force = false)
     {
-        foreach (var kvp in _filterTextBoxes.ToList())
+        foreach (var kvp in _filterControls.ToList())
         {
             var columnId = kvp.Key;
-            var textBox = kvp.Value;
-            var expected = GetFilterText(columnId);
+            var registration = kvp.Value;
 
-            if (!force && textBox.IsFocused)
+            if (!force && registration.IsFocused())
             {
                 continue;
             }
 
-            if (!string.Equals(textBox.Text, expected, StringComparison.Ordinal))
-            {
-                textBox.Text = expected;
-            }
+            var value = GetFilterValue(columnId);
+            registration.ApplyState(value);
         }
     }
 
@@ -531,10 +520,9 @@ public class SaGridComponent<TData> : SolidTable<TData>
         _columnWidthVersion = ComputeColumnWidthVersion();
     }
 
-    private string GetFilterText(string columnId)
+    private object? GetFilterValue(string columnId)
     {
         var filters = Table.State.ColumnFilters?.Filters;
-        var value = filters?.FirstOrDefault(f => f.Id == columnId)?.Value;
-        return value?.ToString() ?? string.Empty;
+        return filters?.FirstOrDefault(f => f.Id == columnId)?.Value;
     }
 }

@@ -54,7 +54,7 @@ internal sealed class ClientStarterExample : IExample
 
         var instructions = new TextBlock
         {
-            Text = "Try sorting, filtering, or selecting rows to explore SaGrid.Advanced basics.",
+            Text = "Try sorting, typing into column filters, toggling the tri-state Active filter, or using the department drop-down.",
             Foreground = Brushes.Gray,
             FontSize = 13
         };
@@ -63,7 +63,9 @@ internal sealed class ClientStarterExample : IExample
 
         var capabilityPanel = new WrapPanel();
         capabilityPanel.Children.Add(CreateCapabilityChip("Sorting"));
-        capabilityPanel.Children.Add(CreateCapabilityChip("Column Filters"));
+        capabilityPanel.Children.Add(CreateCapabilityChip("Text Filters"));
+        capabilityPanel.Children.Add(CreateCapabilityChip("Tri-state Filter"));
+        capabilityPanel.Children.Add(CreateCapabilityChip("Dropdown Filter"));
         capabilityPanel.Children.Add(CreateCapabilityChip("Row Selection"));
         capabilityPanel.Children.Add(CreateCapabilityChip("Cell Selection"));
         capabilityPanel.Children.Add(CreateCapabilityChip("Quick Search"));
