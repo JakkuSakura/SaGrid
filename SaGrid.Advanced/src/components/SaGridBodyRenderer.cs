@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
@@ -96,14 +97,14 @@ internal class SaGridBodyRenderer<TData>
 
             _canvas = new Canvas
             {
-                HorizontalAlignment = HorizontalAlignment.Left
+                HorizontalAlignment = HorizontalAlignment.Stretch
             };
             _scrollViewer = new ScrollViewer
             {
                 Focusable = false,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalContentAlignment = HorizontalAlignment.Left,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 Content = _canvas
             };
 
@@ -168,6 +169,7 @@ internal class SaGridBodyRenderer<TData>
             }
 
             var viewportWidth = viewport.Width;
+
             if (double.IsNaN(viewportWidth) || viewportWidth <= 0)
             {
                 viewportWidth = _scrollViewer.Bounds.Width;
@@ -287,15 +289,9 @@ internal class SaGridBodyRenderer<TData>
         private void UpdateHorizontalExtent(double viewportWidth)
         {
             var layoutWidth = _layoutManager.Snapshot.TotalWidth;
-            double targetWidth;
+            var targetWidth = layoutWidth;
 
-            if (!double.IsNaN(layoutWidth) && !double.IsInfinity(layoutWidth) && layoutWidth > 0)
-            {
-                targetWidth = viewportWidth > 0
-                    ? System.Math.Max(layoutWidth, viewportWidth)
-                    : layoutWidth;
-            }
-            else
+            if (double.IsNaN(targetWidth) || double.IsInfinity(targetWidth) || targetWidth <= 0)
             {
                 targetWidth = viewportWidth;
             }
@@ -305,7 +301,17 @@ internal class SaGridBodyRenderer<TData>
                 targetWidth = RowHeight * System.Math.Max(1, _table.VisibleLeafColumns.Count);
             }
 
+            if (!double.IsNaN(viewportWidth) && viewportWidth > 0)
+            {
+                targetWidth = System.Math.Max(targetWidth, viewportWidth);
+            }
+
             _canvas.Width = targetWidth;
+
+            foreach (var container in _rowControlsById.Values)
+            {
+                container.UpdateWidth(targetWidth);
+            }
         }
 
         private void PruneStaleControlsIfNeeded()
@@ -345,6 +351,11 @@ internal class SaGridBodyRenderer<TData>
         {
             var panel = _layoutManager.CreatePanel();
             panel.Height = RowHeight;
+            var initialWidth = _layoutManager.Snapshot.TotalWidth;
+            if (!double.IsNaN(initialWidth) && !double.IsInfinity(initialWidth) && initialWidth > 0)
+            {
+                panel.Width = initialWidth;
+            }
 
             var cellVisuals = new List<IReusableCellVisual<TData>>();
             var cellVisualsByColumn = new Dictionary<string, IReusableCellVisual<TData>>();
@@ -366,7 +377,9 @@ internal class SaGridBodyRenderer<TData>
             }
 
             panel.Tag = rowId;
-            return new RowControlContainer(panel, cellVisuals, cellVisualsByColumn);
+            var container = new RowControlContainer(panel, cellVisuals, cellVisualsByColumn);
+            container.UpdateWidth(initialWidth);
+            return container;
         }
 
         private sealed class RowControlContainer
@@ -415,6 +428,22 @@ internal class SaGridBodyRenderer<TData>
                 for (var i = 0; i < _cellVisuals.Count; i++)
                 {
                     _cellVisuals[i].Update(row, displayIndex, force);
+                }
+            }
+
+            public void UpdateWidth(double width)
+            {
+                if (double.IsNaN(width) || double.IsInfinity(width) || width <= 0)
+                {
+                    _control.Width = double.NaN;
+                    return;
+                }
+
+                if (Math.Abs(_control.Width - width) > 0.5)
+                {
+                    _control.Width = width;
+                    _control.InvalidateMeasure();
+                    _control.InvalidateArrange();
                 }
             }
 

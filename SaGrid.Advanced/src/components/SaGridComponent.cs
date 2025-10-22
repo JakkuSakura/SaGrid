@@ -53,6 +53,8 @@ public class SaGridComponent<TData> : SolidTable<TData>
     private readonly SaGridFooterRenderer<TData> _footerRenderer;
     private DragDropManager<TData>? _dragDropManager;
     private DragValidationService<TData>? _dragValidationService;
+    private double _lastViewportWidth = double.NaN;
+    private double _lastTargetWidth = double.NaN;
 
     private (Func<Table<TData>> Getter, Action<Table<TData>> Setter) TableSignalValue =>
         TableSignal ?? throw new InvalidOperationException("Table signal not initialized.");
@@ -206,24 +208,14 @@ public class SaGridComponent<TData> : SolidTable<TData>
                 RowDefinitions = new RowDefinitions("*,Auto")
             };
 
-            _horizontalScrollViewer = new ScrollViewer
-            {
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                Focusable = false
-            };
-            _horizontalScrollViewer.PropertyChanged += HorizontalScrollViewerOnPropertyChanged;
-
             _scrollContentGrid = new GridControl
             {
-                RowDefinitions = new RowDefinitions("Auto,*"),
-                HorizontalAlignment = HorizontalAlignment.Left
+                RowDefinitions = new RowDefinitions("Auto,*")
             };
 
             _headerContainer = new StackPanel
             {
-                Orientation = Orientation.Vertical,
-                HorizontalAlignment = HorizontalAlignment.Left
+                Orientation = Orientation.Vertical
             };
             GridControl.SetRow(_headerContainer, 0);
             _scrollContentGrid.Children.Add(_headerContainer);
@@ -238,7 +230,15 @@ public class SaGridComponent<TData> : SolidTable<TData>
             GridControl.SetRow(_bodyHost, 1);
             _scrollContentGrid.Children.Add(_bodyHost);
 
-            _horizontalScrollViewer.Content = _scrollContentGrid;
+            _horizontalScrollViewer = new ScrollViewer
+            {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Focusable = false,
+                Content = _scrollContentGrid
+            };
+            _horizontalScrollViewer.PropertyChanged += HorizontalScrollViewerOnPropertyChanged;
+            _horizontalScrollViewer.LayoutUpdated += HorizontalScrollViewerOnLayoutUpdated;
 
             GridControl.SetRow(_horizontalScrollViewer, 0);
             _rootGrid.Children.Add(_horizontalScrollViewer);
@@ -259,6 +259,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
 
             RebuildHeaderStructure();
             EnsureBodyControl(force: true);
+            UpdateHorizontalLayoutMetrics();
 
             _footerHost.Content = Reactive(() =>
             {
@@ -276,6 +277,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
         }
 
         EnsureBodyControl();
+        UpdateHorizontalLayoutMetrics();
         ReportAvailableWidth();
         return _rootBorder!;
     }
@@ -332,6 +334,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
         {
             border.PropertyChanged += RootBorderOnPropertyChanged;
             ReportAvailableWidth();
+            UpdateHorizontalLayoutMetrics();
         }
     }
 
@@ -357,7 +360,13 @@ public class SaGridComponent<TData> : SolidTable<TData>
             {
                 _layoutManager.ReportViewportWidth(viewport.Width);
             }
+            UpdateHorizontalLayoutMetrics();
         }
+    }
+
+    private void HorizontalScrollViewerOnLayoutUpdated(object? sender, EventArgs e)
+    {
+        UpdateHorizontalLayoutMetrics();
     }
 
     private void RootBorderOnPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
@@ -404,6 +413,8 @@ public class SaGridComponent<TData> : SolidTable<TData>
             _layoutManager.ReportViewportWidth(effectiveWidth);
             _layoutManager.Refresh();
         }
+
+        UpdateHorizontalLayoutMetrics();
     }
 
     private void EnsureDragDropInfrastructure()
@@ -451,7 +462,71 @@ public class SaGridComponent<TData> : SolidTable<TData>
             _columnWidthVersion = newWidthVersion;
             _layoutManager?.Refresh();
             _virtualizedRowsControl?.RefreshLayout();
+            UpdateHorizontalLayoutMetrics();
         }
+    }
+
+    private void UpdateHorizontalLayoutMetrics()
+    {
+        if (_layoutManager == null || _horizontalScrollViewer == null || _scrollContentGrid == null)
+        {
+            return;
+        }
+
+        var viewportWidth = _horizontalScrollViewer.Viewport.Width;
+        if (double.IsNaN(viewportWidth) || viewportWidth <= 0)
+        {
+            viewportWidth = _horizontalScrollViewer.Bounds.Width;
+        }
+
+        if (double.IsNaN(viewportWidth) || viewportWidth <= 0)
+        {
+            viewportWidth = _rootBorder?.Bounds.Width ?? double.NaN;
+        }
+
+        var totalWidth = _layoutManager.Snapshot.TotalWidth;
+        if (double.IsNaN(totalWidth) || totalWidth <= 0)
+        {
+            totalWidth = viewportWidth;
+        }
+
+        var targetWidth = !double.IsNaN(viewportWidth) && viewportWidth > 0
+            ? Math.Max(totalWidth, viewportWidth)
+            : totalWidth;
+
+        var viewportChanged = double.IsNaN(_lastViewportWidth) || Math.Abs(viewportWidth - _lastViewportWidth) > 0.5;
+        var targetChanged = double.IsNaN(_lastTargetWidth) || Math.Abs(targetWidth - _lastTargetWidth) > 0.5;
+
+        if (!viewportChanged && !targetChanged)
+        {
+            return;
+        }
+
+        _lastViewportWidth = viewportWidth;
+        _lastTargetWidth = targetWidth;
+
+        if (double.IsNaN(targetWidth) || targetWidth <= 0)
+        {
+            _scrollContentGrid.MinWidth = 0;
+            _scrollContentGrid.Width = double.NaN;
+            if (_headerContainer != null)
+            {
+                _headerContainer.MinWidth = 0;
+                _headerContainer.Width = double.NaN;
+            }
+        }
+        else
+        {
+            _scrollContentGrid.MinWidth = targetWidth;
+            _scrollContentGrid.Width = targetWidth;
+            if (_headerContainer != null)
+            {
+                _headerContainer.MinWidth = targetWidth;
+                _headerContainer.Width = targetWidth;
+            }
+        }
+
+        _virtualizedRowsControl?.RefreshLayout();
     }
 
     private string ComputeHeaderStructureVersion()
@@ -522,7 +597,6 @@ public class SaGridComponent<TData> : SolidTable<TData>
         if (header is Control hdrCtrl)
         {
             hdrCtrl.SetValue(Panel.ZIndexProperty, 1);
-            hdrCtrl.HorizontalAlignment = HorizontalAlignment.Left;
             if (hdrCtrl is Panel hdrPanel)
             {
                 hdrPanel.Background = Brushes.White;
@@ -536,6 +610,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
         _filterVersion = ComputeFilterVersion();
         _columnWidthVersion = ComputeColumnWidthVersion();
         RefreshFilterControls(force: true);
+        UpdateHorizontalLayoutMetrics();
     }
 
     private void RefreshFilterControls(bool force = false)
@@ -575,6 +650,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
         _virtualizedRowsControl = bodyControl as ISelectionAwareRowsControl;
         _bodyHost.Content = bodyControl;
         _columnWidthVersion = ComputeColumnWidthVersion();
+        UpdateHorizontalLayoutMetrics();
     }
 
     private object? GetFilterValue(string columnId)
