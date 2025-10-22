@@ -10,7 +10,7 @@ using SaGrid.Core.Models;
 
 namespace SaGrid.Advanced.Components;
 
-internal interface ISaGridComponentHost<TData>
+public interface ISaGridComponentHost<TData>
 {
     event EventHandler? RowDataChanged;
 

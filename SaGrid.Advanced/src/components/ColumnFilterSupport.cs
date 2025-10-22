@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Controls;
 using SaGrid.Core;
+using SaGrid.Core.Models;
 
 namespace SaGrid.Advanced.Components;
 
