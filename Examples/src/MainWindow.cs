@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Examples.Examples;
@@ -103,20 +102,13 @@ public class MainWindow : Window
             }
         };
 
-        var hostScrollViewer = new ScrollViewer
-        {
-            Content = _exampleHost,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
-        };
-
         var hostBorder = new Border
         {
             BorderBrush = Brushes.LightGray,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(10),
-            Child = hostScrollViewer
+            Child = _exampleHost
         };
 
         Grid.SetRow(hostBorder, 3);

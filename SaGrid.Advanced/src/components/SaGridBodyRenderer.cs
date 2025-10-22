@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -15,6 +16,7 @@ namespace SaGrid.Advanced.Components;
 internal interface ISelectionAwareRowsControl
 {
     void ApplySelectionDelta(CellSelectionDelta delta);
+    void RefreshLayout();
 }
 
 internal class SaGridBodyRenderer<TData>
@@ -92,10 +94,16 @@ internal class SaGridBodyRenderer<TData>
             _hostSignalGetter = hostSignalGetter;
             _selectionSignalGetter = selectionSignalGetter;
 
-            _canvas = new Canvas();
+            _canvas = new Canvas
+            {
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
             _scrollViewer = new ScrollViewer
             {
                 Focusable = false,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
                 Content = _canvas
             };
 
@@ -111,6 +119,7 @@ internal class SaGridBodyRenderer<TData>
             _host.RowDataChanged += OnRowDataChanged;
             _ = _host.EnsureDataRangeAsync(0, _host.GetPreferredFetchSize());
             UpdateViewport(force: true);
+            Dispatcher.UIThread.Post(() => UpdateViewport(force: true));
         }
 
         private void OnDetached(object? sender, VisualTreeAttachmentEventArgs e)
@@ -157,6 +166,18 @@ internal class SaGridBodyRenderer<TData>
             {
                 viewportHeight = RowHeight * 20;
             }
+
+            var viewportWidth = viewport.Width;
+            if (double.IsNaN(viewportWidth) || viewportWidth <= 0)
+            {
+                viewportWidth = _scrollViewer.Bounds.Width;
+            }
+            if (double.IsNaN(viewportWidth) || viewportWidth <= 0)
+            {
+                viewportWidth = _layoutManager.Snapshot.TotalWidth;
+            }
+
+            UpdateHorizontalExtent(viewportWidth);
 
             if (totalRows == 0)
             {
@@ -256,6 +277,35 @@ internal class SaGridBodyRenderer<TData>
         {
             _ = delta;
             UpdateViewport(force: true);
+        }
+
+        public void RefreshLayout()
+        {
+            UpdateViewport(force: true);
+        }
+
+        private void UpdateHorizontalExtent(double viewportWidth)
+        {
+            var layoutWidth = _layoutManager.Snapshot.TotalWidth;
+            double targetWidth;
+
+            if (!double.IsNaN(layoutWidth) && !double.IsInfinity(layoutWidth) && layoutWidth > 0)
+            {
+                targetWidth = viewportWidth > 0
+                    ? System.Math.Max(layoutWidth, viewportWidth)
+                    : layoutWidth;
+            }
+            else
+            {
+                targetWidth = viewportWidth;
+            }
+
+            if (double.IsNaN(targetWidth) || targetWidth <= 0)
+            {
+                targetWidth = RowHeight * System.Math.Max(1, _table.VisibleLeafColumns.Count);
+            }
+
+            _canvas.Width = targetWidth;
         }
 
         private void PruneStaleControlsIfNeeded()

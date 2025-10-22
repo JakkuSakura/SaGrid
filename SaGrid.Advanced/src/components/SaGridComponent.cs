@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
@@ -30,6 +31,8 @@ public class SaGridComponent<TData> : SolidTable<TData>
     private (Func<int>, Action<int>)? _selectionSignal;
     private Grid? _rootGrid;
     private Border? _rootBorder;
+    private ScrollViewer? _horizontalScrollViewer;
+    private GridControl? _scrollContentGrid;
     private StackPanel? _headerContainer;
     private ContentControl? _bodyHost;
     private ContentControl? _footerHost;
@@ -200,25 +203,51 @@ public class SaGridComponent<TData> : SolidTable<TData>
         {
             _rootGrid = new GridControl
             {
-                RowDefinitions = new RowDefinitions("Auto,*,Auto")
+                RowDefinitions = new RowDefinitions("*,Auto")
             };
 
-            EnsureDragDropInfrastructure();
+            _horizontalScrollViewer = new ScrollViewer
+            {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Focusable = false
+            };
+            _horizontalScrollViewer.PropertyChanged += HorizontalScrollViewerOnPropertyChanged;
+
+            _scrollContentGrid = new GridControl
+            {
+                RowDefinitions = new RowDefinitions("Auto,*"),
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
 
             _headerContainer = new StackPanel
             {
-                Orientation = Orientation.Vertical
+                Orientation = Orientation.Vertical,
+                HorizontalAlignment = HorizontalAlignment.Left
             };
             GridControl.SetRow(_headerContainer, 0);
-            _rootGrid.Children.Add(_headerContainer);
+            _scrollContentGrid.Children.Add(_headerContainer);
 
-            _bodyHost = new ContentControl();
+            _bodyHost = new ContentControl
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                VerticalContentAlignment = VerticalAlignment.Stretch
+            };
             GridControl.SetRow(_bodyHost, 1);
-            _rootGrid.Children.Add(_bodyHost);
+            _scrollContentGrid.Children.Add(_bodyHost);
+
+            _horizontalScrollViewer.Content = _scrollContentGrid;
+
+            GridControl.SetRow(_horizontalScrollViewer, 0);
+            _rootGrid.Children.Add(_horizontalScrollViewer);
 
             _footerHost = new ContentControl();
-            GridControl.SetRow(_footerHost, 2);
+            GridControl.SetRow(_footerHost, 1);
             _rootGrid.Children.Add(_footerHost);
+
+            EnsureDragDropInfrastructure();
 
             _rootBorder = new Border()
                 .BorderThickness(1)
@@ -314,6 +343,23 @@ public class SaGridComponent<TData> : SolidTable<TData>
         }
     }
 
+    private void HorizontalScrollViewerOnPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (sender is not ScrollViewer viewer)
+        {
+            return;
+        }
+
+        if (e.Property == ScrollViewer.ViewportProperty)
+        {
+            var viewport = viewer.Viewport;
+            if (!double.IsNaN(viewport.Width) && viewport.Width > 0 && _layoutManager != null)
+            {
+                _layoutManager.ReportViewportWidth(viewport.Width);
+            }
+        }
+    }
+
     private void RootBorderOnPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
         if (e.Property == BoundsProperty)
@@ -342,6 +388,15 @@ public class SaGridComponent<TData> : SolidTable<TData>
         if (effectiveWidth <= 0)
         {
             return;
+        }
+
+        if (_horizontalScrollViewer != null)
+        {
+            var viewportWidth = _horizontalScrollViewer.Viewport.Width;
+            if (!double.IsNaN(viewportWidth) && viewportWidth > 0)
+            {
+                effectiveWidth = viewportWidth;
+            }
         }
 
         if (_layoutManager != null)
@@ -395,6 +450,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
         {
             _columnWidthVersion = newWidthVersion;
             _layoutManager?.Refresh();
+            _virtualizedRowsControl?.RefreshLayout();
         }
     }
 
@@ -466,6 +522,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
         if (header is Control hdrCtrl)
         {
             hdrCtrl.SetValue(Panel.ZIndexProperty, 1);
+            hdrCtrl.HorizontalAlignment = HorizontalAlignment.Left;
             if (hdrCtrl is Panel hdrPanel)
             {
                 hdrPanel.Background = Brushes.White;
