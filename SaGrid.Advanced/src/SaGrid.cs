@@ -73,12 +73,24 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
     {
         if (_component != null) _component.ApplyState(state, updateRowModel);
         else _fallbackTable!.SetState(state, updateRowModel);
+
+        if (_rowModelType == RowModelType.ServerSide)
+        {
+            _serverSideRowModel?.Refresh(ServerSideRefreshMode.Full, purge: true);
+            ScheduleUIUpdate();
+        }
     }
 
     public void SetState(Updater<TableState<TData>> updater, bool updateRowModel = true)
     {
         if (_component != null) _component.ApplyState(updater, updateRowModel);
         else _fallbackTable!.SetState(updater, updateRowModel);
+
+        if (_rowModelType == RowModelType.ServerSide)
+        {
+            _serverSideRowModel?.Refresh(ServerSideRefreshMode.Full, purge: true);
+            ScheduleUIUpdate();
+        }
     }
 
     public Column<TData>? GetColumn(string columnId) => _component != null ? _component.FindColumn(columnId) : _fallbackTable!.GetColumn(columnId);

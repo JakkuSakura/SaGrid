@@ -35,7 +35,6 @@ public class SaGridComponent<TData> : SolidTable<TData>
     private GridControl? _scrollContentGrid;
     private StackPanel? _headerContainer;
     private ContentControl? _bodyHost;
-    private ContentControl? _footerHost;
     private readonly Dictionary<string, ColumnFilterRegistration> _filterControls = new();
     private int _themeTick;
     private string _headerStructureVersion = string.Empty;
@@ -206,7 +205,8 @@ public class SaGridComponent<TData> : SolidTable<TData>
         {
             _rootGrid = new GridControl
             {
-                RowDefinitions = new RowDefinitions("*,Auto")
+                // Header/body only; omit footer to avoid redundancy with status UI
+                RowDefinitions = new RowDefinitions("*")
             };
 
             _scrollContentGrid = new GridControl
@@ -244,10 +244,6 @@ public class SaGridComponent<TData> : SolidTable<TData>
             GridControl.SetRow(_horizontalScrollViewer, 0);
             _rootGrid.Children.Add(_horizontalScrollViewer);
 
-            _footerHost = new ContentControl();
-            GridControl.SetRow(_footerHost, 1);
-            _rootGrid.Children.Add(_footerHost);
-
             EnsureDragDropInfrastructure();
 
             _rootBorder = new Border()
@@ -262,19 +258,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
             EnsureBodyControl(force: true);
             UpdateHorizontalLayoutMetrics();
 
-            _footerHost.Content = Reactive(() =>
-            {
-                // Ensure dependency on selection ticks so footer reacts to state changes
-                var selTick = _selectionSignal?.Item1();
-                _ = selTick;
-
-                if (_host.IsStatusBarVisible())
-                {
-                    return new StackPanel();
-                }
-
-                return _footerRenderer.CreateFooter(_host, Table);
-            });
+            // Footer intentionally removed; status widgets (if any) live outside the component
         }
 
         EnsureBodyControl();

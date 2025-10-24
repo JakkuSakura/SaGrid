@@ -39,7 +39,7 @@ internal sealed class ServerSideAnalyticsExample : IExample
             EnableSorting = true,
             EnableGlobalFilter = true,
             EnableColumnFilters = true,
-            EnablePagination = true,
+            EnablePagination = false,
             EnableRowSelection = true,
             EnableCellSelection = true,
             EnableColumnResizing = true,
@@ -51,7 +51,6 @@ internal sealed class ServerSideAnalyticsExample : IExample
             OnStateChange = state => onStateChange?.Invoke(state),
             State = new TableState<Person>
             {
-                Pagination = new PaginationState { PageIndex = 0, PageSize = 15 },
                 // Auto-fit star columns to viewport like other examples
                 ColumnSizing = new ColumnSizingState()
             }
@@ -85,18 +84,13 @@ internal sealed class ServerSideAnalyticsExample : IExample
         controlsContext = BuildControlsPanel(grid, refresh);
         var controls = controlsContext.Panel;
 
-        var statusBarHost = new StatusBarHost();
-        statusBarHost.Initialize(grid.GetStatusBarService(), grid);
-
         var gridComponent = grid.Component;
         var tableArea = new Grid
         {
-            RowDefinitions = new RowDefinitions("*,Auto")
+            RowDefinitions = new RowDefinitions("*")
         };
         Grid.SetRow(gridComponent, 0);
         tableArea.Children.Add(gridComponent);
-        Grid.SetRow(statusBarHost, 1);
-        tableArea.Children.Add(statusBarHost);
 
         var layout = new Grid
         {
@@ -367,16 +361,82 @@ internal sealed class ServerSideAnalyticsExample : IExample
                     continue;
                 }
 
-                var acceptedValues = ExtractFilterValues(filter.Value);
-                if (acceptedValues == null || acceptedValues.Count == 0)
+                // Text contains semantics for scalar string filter values
+                if (filter.Value is string s && !string.IsNullOrWhiteSpace(s))
                 {
+                    var term = s.Trim();
+                    query = query.Where(row =>
+                    {
+                        var value = GetFieldValue(row, filter.Key);
+                        return (value?.ToString() ?? string.Empty)
+                            .IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
+                    });
                     continue;
                 }
 
-                query = query.Where(row => acceptedValues.Contains(GetFieldValue(row, filter.Key)?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase));
+                // Boolean equality
+                if (filter.Value is bool b)
+                {
+                    query = query.Where(row =>
+                    {
+                        var value = GetFieldValue(row, filter.Key);
+                        return value is bool vb && vb == b;
+                    });
+                    continue;
+                }
+
+                // Numeric range: support { min, max } object/dictionary
+                if (filter.Value is IReadOnlyDictionary<string, object?> dict)
+                {
+                    double minParsed = 0, maxParsed = 0;
+                    var hasMin = dict.TryGetValue("min", out var minObj) && TryToDouble(minObj, out minParsed);
+                    var hasMax = dict.TryGetValue("max", out var maxObj) && TryToDouble(maxObj, out maxParsed);
+                    if (hasMin || hasMax)
+                    {
+                        double? minVal = hasMin ? minParsed : null;
+                        double? maxVal = hasMax ? maxParsed : null;
+                        query = query.Where(row =>
+                        {
+                            var value = GetFieldValue(row, filter.Key);
+                            if (!TryToDouble(value, out var v)) return false;
+                            if (minVal.HasValue && v < minVal.Value) return false;
+                            if (maxVal.HasValue && v > maxVal.Value) return false;
+                            return true;
+                        });
+                        continue;
+                    }
+                }
+
+                // Set membership (multi-select) semantics
+                var acceptedValues = ExtractFilterValues(filter.Value);
+                if (acceptedValues != null && acceptedValues.Count > 0)
+                {
+                    query = query.Where(row => acceptedValues.Contains(GetFieldValue(row, filter.Key)?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase));
+                }
             }
 
             return query;
+        }
+
+        private static bool TryToDouble(object? value, out double result)
+        {
+            switch (value)
+            {
+                case null:
+                    result = 0; return false;
+                case double d:
+                    result = d; return true;
+                case float f:
+                    result = f; return true;
+                case int i:
+                    result = i; return true;
+                case long l:
+                    result = l; return true;
+                case string s when double.TryParse(s, out var parsed):
+                    result = parsed; return true;
+                default:
+                    result = 0; return false;
+            }
         }
 
         private static IReadOnlyCollection<string>? ExtractFilterValues(object value)

@@ -799,20 +799,17 @@ internal class SaGridHeaderRenderer<TData>
 
         var isUpdating = false;
 
-        checkBox.PropertyChanged += (_, args) =>
+        // Unified change handler across tri-state values
+        checkBox.IsCheckedChanged += (_, _) =>
         {
-            if (args.Property != ToggleButton.IsCheckedProperty || isUpdating)
-            {
-                return;
-            }
-
-            var value = checkBox.IsChecked switch
+            if (isUpdating) return;
+            var v = checkBox.IsChecked;
+            object? value = v switch
             {
                 true => (object?)true,
                 false => false,
                 _ => null
             };
-
             host.SetColumnFilter(column.Id, value);
         };
 

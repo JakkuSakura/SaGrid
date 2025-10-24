@@ -24,9 +24,9 @@ public static class StatusBarDefaultWidgets
 
     public static IReadOnlyList<StatusBarWidgetDefinition> CreateDefaultWidgets<TData>()
     {
+        // Remove the "Total Rows" widget to avoid showing misleading totals (e.g., 0 in server mode)
         return new List<StatusBarWidgetDefinition>
         {
-            new StatusBarWidgetDefinition(TotalRowsId, "Total Rows", grid => new TotalRowsWidget<TData>((SaGrid<TData>)grid), 100),
             new StatusBarWidgetDefinition(SelectedRowsId, "Selected", grid => new SelectedRowsWidget<TData>((SaGrid<TData>)grid), 200),
             new StatusBarWidgetDefinition(FilteredRowsId, "Filtered", grid => new FilteredRowsWidget<TData>((SaGrid<TData>)grid), 300),
             new StatusBarWidgetDefinition(AggregationSummaryId, "Aggregations", grid => new AggregationSummaryWidget<TData>((SaGrid<TData>)grid), 350),

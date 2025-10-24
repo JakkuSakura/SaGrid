@@ -20,7 +20,10 @@
   <!-- Conditional reference to SolidAvalonia: use embedded by default,
        but allow overriding via CProjectPath provided by a parent repo. -->
   <PropertyGroup>
+    <!-- Default to embedded SolidAvalonia only if the project exists.
+         Allow overriding via CProjectPath from a parent repo. -->
     <UseEmbeddedSolidAvalonia>true</UseEmbeddedSolidAvalonia>
+    <UseEmbeddedSolidAvalonia Condition="!Exists('..\\external\\SolidAvalonia\\SolidAvalonia.csproj')">false</UseEmbeddedSolidAvalonia>
     <UseEmbeddedSolidAvalonia Condition=" '$(CProjectPath)' != '' ">false</UseEmbeddedSolidAvalonia>
   </PropertyGroup>
 
@@ -33,7 +36,7 @@
   <ItemGroup Condition=" '$(UseEmbeddedSolidAvalonia)' == 'true' ">
     <ProjectReference Include="..\external\SolidAvalonia\SolidAvalonia.csproj" />
   </ItemGroup>
-  <ItemGroup Condition=" '$(UseEmbeddedSolidAvalonia)' != 'true' ">
+  <ItemGroup Condition=" '$(UseEmbeddedSolidAvalonia)' != 'true' AND '$(CProjectPath)' != '' ">
     <ProjectReference Include="$(CProjectPath)" />
   </ItemGroup>
 

@@ -12,7 +12,6 @@
   <ItemGroup>
     <ProjectReference Include="..\SaGrid.Core\SaGrid.Core.csproj" />
     <ProjectReference Include="..\SaGrid.Advanced\SaGrid.Advanced.csproj" />
-    <ProjectReference Include="../external/SolidAvalonia/SolidAvalonia.csproj" />
   </ItemGroup>
 
   <ItemGroup>
