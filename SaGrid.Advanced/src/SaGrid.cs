@@ -26,7 +26,7 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 {
     private readonly SaGridComponent<TData>? _component;
     private readonly Table<TData> _table;
-    private string? _quickFilter;
+    // Quick filter removed; rely on global filter only
     
     // Callback for UI updates
     private Action? _onGridUpdate;
@@ -366,18 +366,7 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
             new Dictionary<CellCoordinate, CellEditEntry<TData>>(_batchEditManager.PendingEdits));
     }
 
-    // Advanced search and filtering
-    public void SetQuickFilter(string? searchTerm)
-    {
-        _quickFilter = searchTerm;
-        // In a real implementation, this would trigger filtering
-        // For now, we'll store it and use it in custom filtering logic
-    }
-
-    public string? GetQuickFilter()
-    {
-        return _quickFilter;
-    }
+    // Quick filter removed
 
     // Advanced column operations
     public void SetColumnVisibility(string columnId, bool visible)

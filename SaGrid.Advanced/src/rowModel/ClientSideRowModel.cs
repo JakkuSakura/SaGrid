@@ -253,12 +253,10 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
         var sourceRows = _table.PreFilteredRowModel.Rows;
         var columnFilters = _table.State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
         var globalFilter = _table.State.GlobalFilter?.Value;
-        var quickFilter = _grid.GetQuickFilter();
 
         _filteredRows = sourceRows
             .Where(row => MatchesColumnFilters(row, columnFilters)
-                          && MatchesGlobalFilter(row, globalFilter)
-                          && MatchesQuickFilter(row, quickFilter))
+                          && MatchesGlobalFilter(row, globalFilter))
             .ToList();
     }
 
@@ -421,16 +419,6 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
         }
 
         return true;
-    }
-
-    private bool MatchesQuickFilter(Row<TData> row, string? quickFilter)
-    {
-        if (string.IsNullOrWhiteSpace(quickFilter))
-        {
-            return true;
-        }
-
-        return RowContainsText(row, quickFilter);
     }
 
     private static bool RowContainsText(Row<TData> row, string text)

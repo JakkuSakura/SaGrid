@@ -311,8 +311,8 @@ internal sealed class ServerSideAnalyticsExample : IExample
             var end = Math.Max(start, request.EndRow);
             EnsureRows(end);
 
-            // Use core Table to compute filtered/sorted rows for exact parity with client pipeline
-            var state = BuildStateFromRequest(request);
+            // Build query context (table state + server-only SetFilterState support)
+            var context = BuildContextFromRequest(request);
             var options = new TableOptions<Person>
             {
                 Data = _rows,
@@ -320,11 +320,20 @@ internal sealed class ServerSideAnalyticsExample : IExample
                 EnableSorting = true,
                 EnableGlobalFilter = true,
                 EnableColumnFilters = true,
-                State = state
+                State = context.State
             };
 
             var table = new Table<Person>(options);
-            var filtered = table.RowModel.FlatRows.Select(r => r.Original).ToList();
+            // Start with Core pipeline result
+            IEnumerable<Row<Person>> working = table.RowModel.FlatRows;
+
+            // Apply SetFilterState manually (Core pipeline doesn't handle SetFilterState)
+            if (context.SetFilters.Count > 0)
+            {
+                working = working.Where(row => MatchesSetFilters(row, context.SetFilters));
+            }
+
+            var filtered = working.Select(r => r.Original).ToList();
             start = Math.Clamp(start, 0, filtered.Count);
             end = Math.Clamp(end, start, filtered.Count);
             var rows = filtered.Skip(start).Take(Math.Max(0, end - start)).ToList();
@@ -341,10 +350,11 @@ internal sealed class ServerSideAnalyticsExample : IExample
             return new ServerSideRowsResult<Person>(rows, null);
         }
 
-        private static TableState<Person> BuildStateFromRequest(ServerSideRowsRequest request)
+        private static QueryContext BuildContextFromRequest(ServerSideRowsRequest request)
         {
             var filters = new List<ColumnFilter>();
             object? global = null;
+            var setFilters = new Dictionary<string, SetFilterState>(StringComparer.OrdinalIgnoreCase);
             foreach (var kv in request.FilterModel)
             {
                 if (string.Equals(kv.Key, "__global", StringComparison.OrdinalIgnoreCase))
@@ -353,20 +363,92 @@ internal sealed class ServerSideAnalyticsExample : IExample
                 }
                 else
                 {
-                    filters.Add(new ColumnFilter(kv.Key, kv.Value));
+                    // Convert {min,max} dictionaries into an object with properties so Core can read via reflection
+                    if (kv.Value is IReadOnlyDictionary<string, object?> dict)
+                    {
+                        dict.TryGetValue("min", out var minObj);
+                        dict.TryGetValue("max", out var maxObj);
+                        filters.Add(new ColumnFilter(kv.Key, new RangeFilterProxy(minObj, maxObj)));
+                    }
+                    // Defer SetFilterState to the server-side manual filter stage
+                    else if (kv.Value is SetFilterState setState)
+                    {
+                        setFilters[kv.Key] = setState;
+                    }
+                    else
+                    {
+                        filters.Add(new ColumnFilter(kv.Key, kv.Value));
+                    }
                 }
             }
 
             var sorting = new SortingState(request.SortModel?.ToList() ?? new List<ColumnSort>());
             var columnFilters = filters.Count > 0 ? new ColumnFiltersState(filters) : null;
             var globalFilter = global != null ? new GlobalFilterState(global) : null;
+            ColumnVisibilityState? visibility = null;
+            if (request.ColumnVisibilityMap != null && request.ColumnVisibilityMap.Count > 0)
+            {
+                visibility = new ColumnVisibilityState(new Dictionary<string, bool>(request.ColumnVisibilityMap));
+            }
 
-            return new TableState<Person>
+            var state = new TableState<Person>
             {
                 Sorting = sorting,
                 ColumnFilters = columnFilters,
-                GlobalFilter = globalFilter
+                GlobalFilter = globalFilter,
+                ColumnVisibility = visibility
             };
+
+            return new QueryContext(state, setFilters);
+        }
+
+        // Simple proxy so Core's PassesColumnFilter can read min/max via property reflection
+        private sealed record RangeFilterProxy(object? min, object? max);
+
+        private sealed record QueryContext(
+            TableState<Person> State,
+            IReadOnlyDictionary<string, SetFilterState> SetFilters);
+
+        // No quick filter evaluation – rely on Core global filter
+
+        private static bool MatchesSetFilters(Row<Person> row, IReadOnlyDictionary<string, SetFilterState> setFilters)
+        {
+            foreach (var kv in setFilters)
+            {
+                var cellString = row.GetCell(kv.Key).Value?.ToString() ?? string.Empty;
+                if (!EvaluateSetFilter(cellString, kv.Value))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // Mirrors ClientSideRowModel's set filter evaluation
+        private static bool EvaluateSetFilter(string cellString, SetFilterState state)
+        {
+            var isBlank = string.IsNullOrEmpty(cellString);
+            if (isBlank)
+            {
+                return state.IncludeBlanks;
+            }
+
+            var tokens = cellString
+                .Split(new[] { ',' }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+            var selections = state.SelectedValues;
+            if (selections.Count == 0)
+            {
+                return true;
+            }
+
+            if (state.Operator == SetFilterOperator.All)
+            {
+                return selections.All(selection => tokens.Contains(selection, StringComparer.OrdinalIgnoreCase));
+            }
+
+            return tokens.Any(token => selections.Contains(token, StringComparer.OrdinalIgnoreCase));
         }
     }
 

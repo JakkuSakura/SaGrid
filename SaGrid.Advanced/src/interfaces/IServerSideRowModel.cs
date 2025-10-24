@@ -15,7 +15,8 @@ public sealed record ServerSideRowsRequest(
     int StartRow,
     int EndRow,
     IReadOnlyList<ColumnSort> SortModel,
-    IReadOnlyDictionary<string, object?> FilterModel);
+    IReadOnlyDictionary<string, object?> FilterModel,
+    IReadOnlyDictionary<string, bool>? ColumnVisibilityMap = null);
 
 public sealed record ServerSideRowsResult<TData>(
     IReadOnlyList<TData> Rows,

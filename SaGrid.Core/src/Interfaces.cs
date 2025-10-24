@@ -188,9 +188,7 @@ public interface IAdvancedTable<TData> : ITable<TData>
     object? GetGlobalFilterValue();
     void ClearGlobalFilter();
     
-    // Advanced search and filtering
-    void SetQuickFilter(string? searchTerm);
-    string? GetQuickFilter();
+    // Quick filter removed; global filter remains available
     
     // Advanced column operations
     void SetColumnVisibility(string columnId, bool visible);

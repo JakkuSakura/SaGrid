@@ -13,7 +13,7 @@ public interface IFilterService
 
     void ClearFilter<TData>(SaGrid<TData> grid, string columnId);
 
-    void ApplyQuickFilter<TData>(SaGrid<TData> grid, string? searchTerm);
+    // Quick filter removed; use global filter via grid.SetGlobalFilter
 }
 
 public sealed record SetFilterValue(string Value, int Occurrences);

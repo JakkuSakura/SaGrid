@@ -17,7 +17,6 @@ public sealed class FilterService : IFilterService
     private sealed class FilterState
     {
         public Dictionary<string, SetFilterState> ColumnFilters { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public string? QuickFilter { get; set; }
     }
 
     private readonly ConditionalWeakTable<object, FilterState> _state = new();
@@ -97,15 +96,7 @@ public sealed class FilterService : IFilterService
         }
     }
 
-    public void ApplyQuickFilter<TData>(SaGrid<TData> grid, string? searchTerm)
-    {
-        var filterState = _state.GetValue(grid, _ => new FilterState());
-        filterState.QuickFilter = searchTerm;
-
-        grid.SetQuickFilter(searchTerm);
-        grid.RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Filter));
-        grid.ScheduleUIUpdate();
-    }
+    // Quick filter removed; rely on global filter only
 
     public void NotifyManualFilterChange<TData>(SaGrid<TData> grid, string columnId)
     {
@@ -129,11 +120,7 @@ public sealed class FilterService : IFilterService
         _distinctCache.TryRemove(CreateCacheKey(grid, columnId), out _);
     }
 
-    internal string? GetQuickFilter<TData>(SaGrid<TData> grid)
-    {
-        var filterState = _state.GetValue(grid, _ => new FilterState());
-        return filterState.QuickFilter;
-    }
+    // No quick filter state to retrieve
 
     private void RaiseFilterChanged<TData>(SaGrid<TData> grid, string columnId, SetFilterState? state)
     {

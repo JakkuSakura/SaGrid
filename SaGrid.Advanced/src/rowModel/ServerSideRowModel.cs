@@ -362,7 +362,17 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
             filters["__global"] = _grid.State.GlobalFilter.Value;
         }
 
-        return new ServerSideRowsRequest(startRow, endRow, sortModel, filters);
+        // No quick filter support; server/global/state filters only
+
+        // Include column visibility so server-side global filter matches client visibility rules
+        IReadOnlyDictionary<string, bool>? visibility = null;
+        var visState = _grid.State.ColumnVisibility;
+        if (visState != null && visState.Items.Count > 0)
+        {
+            visibility = new Dictionary<string, bool>(visState.Items);
+        }
+
+        return new ServerSideRowsRequest(startRow, endRow, sortModel, filters, visibility);
     }
 
     private void ClearCache()

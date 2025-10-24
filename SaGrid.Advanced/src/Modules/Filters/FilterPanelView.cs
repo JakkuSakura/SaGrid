@@ -15,7 +15,6 @@ internal sealed class FilterPanelView<TData> : UserControl
     private readonly FilterService _filterService;
     private readonly ListBox _columnList;
     private readonly ContentControl _detailsHost;
-    private readonly TextBox _quickFilterBox;
 
     public FilterPanelView(SaGrid<TData> grid, FilterService filterService)
     {
@@ -28,30 +27,7 @@ internal sealed class FilterPanelView<TData> : UserControl
             Margin = new Thickness(12)
         };
 
-        var header = new StackPanel
-        {
-            Orientation = Orientation.Vertical,
-            Margin = new Thickness(0, 0, 0, 12)
-        };
-
-        header.Children.Add(new TextBlock
-        {
-            Text = "Quick Filter",
-            FontWeight = FontWeight.Bold,
-            Margin = new Thickness(0, 0, 0, 4)
-        });
-
-        _quickFilterBox = new TextBox
-        {
-            Watermark = "Type to filter all columns...",
-            Text = _filterService.GetQuickFilter(_grid),
-            Margin = new Thickness(0, 0, 0, 12)
-        };
-        _quickFilterBox.TextChanged += OnQuickFilterChanged;
-        header.Children.Add(_quickFilterBox);
-
-        DockPanel.SetDock(header, Dock.Top);
-        root.Children.Add(header);
+        // Quick filter UI removed
 
         var contentGrid = new Grid
         {
@@ -103,10 +79,7 @@ internal sealed class FilterPanelView<TData> : UserControl
         Content = root;
     }
 
-    private void OnQuickFilterChanged(object? sender, TextChangedEventArgs e)
-    {
-        _filterService.ApplyQuickFilter(_grid, _quickFilterBox.Text);
-    }
+    // No quick filter hook in the panel UI
 
     private void OnColumnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
