@@ -10,8 +10,8 @@ namespace Examples.Examples.BatchEditing;
 
 internal sealed class BatchEditingExample : IExample
 {
-    public string Name => "Batch Editing Playground";
-    public string Description => "Inline cell editing with batch commit and undo/redo on a compact dataset.";
+    public string Name => "Batch Editing";
+    public string Description => "Inline editing with batch commit and undo/redo over a compact dataset.";
 
     public ExampleHost Create()
     {
@@ -30,7 +30,8 @@ internal sealed class BatchEditingExample : IExample
             EnableColumnResizing = true,
             State = new TableState<Person>
             {
-                ColumnSizing = new ColumnSizingState(totalWidth: ExampleData.DefaultTableWidth)
+                // Let the layout manager auto-fit star columns to the viewport
+                ColumnSizing = new ColumnSizingState()
             }
         };
 
@@ -54,29 +55,42 @@ internal sealed class BatchEditingExample : IExample
         buttonRow.Children.Add(CreateButton("Undo", () => grid.UndoLastEdit()));
         buttonRow.Children.Add(CreateButton("Redo", () => grid.RedoLastEdit()));
 
-        var layout = new StackPanel
+        // Build a grid so the content row can stretch (last row star)
+        var layout = new Grid
         {
-            Orientation = Orientation.Vertical,
-            Spacing = 8,
-            Children =
-            {
-                new TextBlock
-                {
-                    Text = "Inline Editing + Batch Commit",
-                    FontWeight = FontWeight.Bold,
-                    FontSize = 16
-                },
-                infoText,
-                buttonRow,
-                new Border
-                {
-                    BorderBrush = Brushes.LightGray,
-                    BorderThickness = new Thickness(1),
-                    Padding = new Thickness(4),
-                    Child = grid.Component
-                }
-            }
+            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*"),
+            RowSpacing = 8
         };
+
+        var title = new TextBlock
+        {
+            Text = "Inline Editing + Batch Commit",
+            FontWeight = FontWeight.Bold,
+            FontSize = 16
+        };
+        layout.Children.Add(title);
+
+        Grid.SetRow(infoText, 1);
+        layout.Children.Add(infoText);
+
+        Grid.SetRow(buttonRow, 2);
+        layout.Children.Add(buttonRow);
+
+        var gridComponent = grid.Component;
+        gridComponent.HorizontalAlignment = HorizontalAlignment.Stretch;
+        gridComponent.VerticalAlignment = VerticalAlignment.Stretch;
+        gridComponent.MinHeight = 360;
+
+        var gridHost = new Border
+        {
+            BorderBrush = Brushes.LightGray,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(4),
+            Background = Brushes.White,
+            Child = gridComponent
+        };
+        Grid.SetRow(gridHost, 3);
+        layout.Children.Add(gridHost);
 
         return new ExampleHost(layout);
     }

@@ -10,8 +10,8 @@ namespace Examples.Examples.ClientStarter;
 
 internal sealed class ClientStarterExample : IExample
 {
-    public string Name => "Client-Side Starter";
-    public string Description => "Lightweight client row model showcasing basic sorting, filtering, and selection.";
+    public string Name => "Client Starter (Local Data)";
+    public string Description => "Local/client row model with sorting, filters, and selection.";
 
     public ExampleHost Create()
     {

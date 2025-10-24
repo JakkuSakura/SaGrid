@@ -12,7 +12,7 @@ namespace Examples;
 public class MainWindow : Window
 {
     private readonly IReadOnlyList<IExample> _examples;
-    private ComboBox? _exampleSelector;
+    private TabControl? _exampleTabs;
     private TextBlock? _exampleDescription;
     private ContentControl? _exampleHost;
     private ExampleHost? _currentHost;
@@ -32,9 +32,9 @@ public class MainWindow : Window
 
         Content = BuildLayout();
 
-        if (_exampleSelector != null && _exampleSelector.Items != null)
+        if (_exampleTabs?.Items is IList<object> items && items.Count > 0)
         {
-            _exampleSelector.SelectedIndex = 0;
+            _exampleTabs.SelectedIndex = 0;
         }
     }
 
@@ -64,30 +64,32 @@ public class MainWindow : Window
         Grid.SetRow(subtitle, 1);
         layout.Children.Add(subtitle);
 
-        var selectorPanel = new StackPanel
+        _exampleTabs = new TabControl
         {
-            Orientation = Orientation.Vertical,
-            Spacing = 6
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch
         };
+        _exampleTabs.SelectionChanged += OnTabSelected;
 
-        _exampleSelector = new ComboBox
+        var tabs = new List<TabItem>();
+        foreach (var ex in _examples)
         {
-            ItemsSource = _examples,
-            SelectedIndex = -1,
-            MinWidth = 260
-        };
-        _exampleSelector.SelectionChanged += OnExampleSelected;
-        selectorPanel.Children.Add(_exampleSelector);
+            tabs.Add(new TabItem { Header = ex.Name, Tag = ex });
+        }
+        _exampleTabs.ItemsSource = tabs;
 
         _exampleDescription = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 4, 0, 0)
         };
-        selectorPanel.Children.Add(_exampleDescription);
 
-        Grid.SetRow(selectorPanel, 2);
-        layout.Children.Add(selectorPanel);
+        var tabsAndDesc = new StackPanel { Orientation = Orientation.Vertical, Spacing = 6 };
+        tabsAndDesc.Children.Add(_exampleTabs);
+        tabsAndDesc.Children.Add(_exampleDescription);
+
+        Grid.SetRow(tabsAndDesc, 2);
+        layout.Children.Add(tabsAndDesc);
 
         _exampleHost = new ContentControl
         {
@@ -117,9 +119,9 @@ public class MainWindow : Window
         return layout;
     }
 
-    private void OnExampleSelected(object? sender, SelectionChangedEventArgs e)
+    private void OnTabSelected(object? sender, SelectionChangedEventArgs e)
     {
-        if (_exampleSelector?.SelectedItem is IExample example)
+        if (_exampleTabs?.SelectedItem is TabItem tab && tab.Tag is IExample example)
         {
             LoadExample(example);
         }

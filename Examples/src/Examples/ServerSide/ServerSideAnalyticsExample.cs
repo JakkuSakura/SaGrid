@@ -21,8 +21,8 @@ internal sealed class ServerSideAnalyticsExample : IExample
 {
     private const string ColumnPanelId = "columnManager";
 
-    public string Name => "Server-Side Analytics Demo";
-    public string Description => "Enterprise-style configuration with server-side row model, side bar, status bar, and analytics tooling.";
+    public string Name => "Server-side Analytics (Server Data)";
+    public string Description => "Server-driven row model with side bar, status bar, and analytics tooling.";
 
     public ExampleHost Create()
     {
@@ -52,7 +52,8 @@ internal sealed class ServerSideAnalyticsExample : IExample
             State = new TableState<Person>
             {
                 Pagination = new PaginationState { PageIndex = 0, PageSize = 15 },
-                ColumnSizing = new ColumnSizingState(totalWidth: ExampleData.DefaultTableWidth)
+                // Auto-fit star columns to viewport like other examples
+                ColumnSizing = new ColumnSizingState()
             }
         };
 
@@ -114,23 +115,30 @@ internal sealed class ServerSideAnalyticsExample : IExample
         Grid.SetColumn(statusBarHost, 1);
         Grid.SetRow(statusBarHost, 1);
 
-        var layout = new StackPanel
+        var layout = new Grid
         {
-            Orientation = Orientation.Vertical,
-            Children =
-            {
-                new TextBlock
-                {
-                    Text = "Server-Side Analytics Demo",
-                    FontSize = 18,
-                    FontWeight = FontWeight.Bold,
-                    Margin = new Thickness(20, 10)
-                },
-                controls,
-                infoText,
-                tableArea
-            }
+            RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto"),
+            RowSpacing = 8,
+            Margin = new Thickness(20, 10, 20, 20)
         };
+
+        var title = new TextBlock
+        {
+            Text = "Server-side Analytics",
+            FontSize = 18,
+            FontWeight = FontWeight.Bold
+        };
+        layout.Children.Add(title);
+
+        Grid.SetRow(controls, 1);
+        layout.Children.Add(controls);
+
+        Grid.SetRow(infoText, 3);
+        layout.Children.Add(infoText);
+
+        // Stretch tableArea in the star row
+        Grid.SetRow(tableArea, 2);
+        layout.Children.Add(tableArea);
 
         refresh();
 
