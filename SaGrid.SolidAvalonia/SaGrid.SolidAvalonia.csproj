@@ -17,10 +17,23 @@
     <RootNamespace>SaGrid.SolidAvalonia</RootNamespace>
   </PropertyGroup>
 
+  <!-- Conditional reference to SolidAvalonia: use embedded by default,
+       but allow overriding via CProjectPath provided by a parent repo. -->
+  <PropertyGroup>
+    <UseEmbeddedSolidAvalonia>true</UseEmbeddedSolidAvalonia>
+    <UseEmbeddedSolidAvalonia Condition=" '$(CProjectPath)' != '' ">false</UseEmbeddedSolidAvalonia>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\SaGrid.Core\SaGrid.Core.csproj" />
     <ProjectReference Include="..\SaGrid.Avalonia\SaGrid.Avalonia.csproj" />
-    <ProjectReference Include="../external/SolidAvalonia/SolidAvalonia.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition=" '$(UseEmbeddedSolidAvalonia)' == 'true' ">
+    <ProjectReference Include="..\external\SolidAvalonia\SolidAvalonia.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition=" '$(UseEmbeddedSolidAvalonia)' != 'true' ">
+    <ProjectReference Include="$(CProjectPath)" />
   </ItemGroup>
 
   <ItemGroup>
