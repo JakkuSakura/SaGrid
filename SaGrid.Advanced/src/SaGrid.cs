@@ -1078,6 +1078,14 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
     }
 
     /// <summary>
+    /// Configure server-side retention policy (number of margin blocks around viewport and maximum resident blocks in cache).
+    /// </summary>
+    public void SetServerSideRetention(int retainMarginBlocks, int maxResidentBlocks)
+    {
+        _serverSideRowModel?.ConfigureRetention(retainMarginBlocks, maxResidentBlocks);
+    }
+
+    /// <summary>
     /// Add event listener for typed events
     /// </summary>
     public void AddEventListener<T>(string eventType, Action<T> listener) where T : class

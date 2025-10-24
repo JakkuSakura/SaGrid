@@ -32,9 +32,11 @@ public class MainWindow : Window
 
         Content = BuildLayout();
 
-        if (_exampleTabs?.Items is IList<object> items && items.Count > 0)
+        // Default to the first example on startup
+        if (_examples.Count > 0)
         {
-            _exampleTabs.SelectedIndex = 0;
+            _exampleTabs!.SelectedIndex = 0;
+            LoadExample(_examples[0]);
         }
     }
 

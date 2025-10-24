@@ -142,6 +142,32 @@ internal sealed class ReactiveCellComponent<TData> : Component, IReusableCellVis
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         var isCtrlPressed = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+        // If another cell is currently being edited, cancel editing when clicking a different cell
+        try
+        {
+            var service = _host.GetEditingService();
+            if (_host is SaGrid<TData> grid)
+            {
+                var active = service.GetActiveSession(grid);
+                if (active != null)
+                {
+                    var isSameCell = ReferenceEquals(active.Row, _row) && ReferenceEquals(active.Column, _column);
+                    if (!isSameCell)
+                    {
+                        grid.CancelActiveCellEdit();
+                    }
+                }
+
+                // If batch editing is active and user clicks (not Ctrl-add), begin edit for this cell on single click
+                var isBatch = service.GetBatchManager(grid).IsBatchInProgress;
+                if (isBatch && !isCtrlPressed)
+                {
+                    grid.BeginCellEdit(_row, _column);
+                }
+            }
+        }
+        catch { /* best-effort guard; non-fatal */ }
+
         _host.SelectCell(_displayIndex, _column.Id, isCtrlPressed);
         e.Handled = true;
     }

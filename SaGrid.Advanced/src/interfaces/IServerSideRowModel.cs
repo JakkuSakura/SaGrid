@@ -35,5 +35,5 @@ public interface IServerSideRowModel<TData> : IRowModel<TData>
     void SetDataSource(IServerSideDataSource<TData> dataSource, bool refresh = true);
     void Refresh(ServerSideRefreshMode mode = ServerSideRefreshMode.Full, bool purge = false);
     event EventHandler? RowsChanged;
+    void ConfigureRetention(int retainMarginBlocks, int maxResidentBlocks);
 }
-

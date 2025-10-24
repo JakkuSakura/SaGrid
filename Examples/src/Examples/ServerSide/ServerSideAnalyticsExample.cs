@@ -10,7 +10,7 @@ using Avalonia.Threading;
 using Examples.Models;
 using SaGrid.Advanced;
 using SaGrid.Advanced.Interfaces;
-using SaGrid.Advanced.Modules.SideBar;
+// using SaGrid.Advanced.Modules.SideBar;
 using SaGrid.Advanced.Modules.StatusBar;
 using SaGrid.Advanced.RowModel;
 using SaGrid.Core;
@@ -22,7 +22,7 @@ internal sealed class ServerSideAnalyticsExample : IExample
     private const string ColumnPanelId = "columnManager";
 
     public string Name => "Server-side Analytics (Server Data)";
-    public string Description => "Server-driven row model with side bar, status bar, and analytics tooling.";
+    public string Description => "Server-driven row model with infinite scroll and status bar.";
 
     public ExampleHost Create()
     {
@@ -62,8 +62,6 @@ internal sealed class ServerSideAnalyticsExample : IExample
         ConfigureAdvancedFeatures(grid);
         Action refresh = null!;
 
-        var sideBarService = grid.GetSideBarService();
-        sideBarService.StateChanged += OnSideBarStateChanged;
         grid.RowDataChanged += OnRowDataChanged;
 
         var infoText = new TextBlock
@@ -87,39 +85,23 @@ internal sealed class ServerSideAnalyticsExample : IExample
         controlsContext = BuildControlsPanel(grid, refresh);
         var controls = controlsContext.Panel;
 
-        var sideBarHost = new SideBarHost();
-        sideBarHost.Initialize(sideBarService, grid);
-
         var statusBarHost = new StatusBarHost();
         statusBarHost.Initialize(grid.GetStatusBarService(), grid);
 
         var gridComponent = grid.Component;
-
         var tableArea = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            RowDefinitions = new RowDefinitions("*,Auto"),
-            Margin = new Thickness(20, 10, 20, 20)
+            RowDefinitions = new RowDefinitions("*,Auto")
         };
-
-        tableArea.Children.Add(sideBarHost);
-        Grid.SetColumn(sideBarHost, 0);
-        Grid.SetRow(sideBarHost, 0);
-        Grid.SetRowSpan(sideBarHost, 2);
-
-        tableArea.Children.Add(gridComponent);
-        Grid.SetColumn(gridComponent, 1);
         Grid.SetRow(gridComponent, 0);
-
-        tableArea.Children.Add(statusBarHost);
-        Grid.SetColumn(statusBarHost, 1);
+        tableArea.Children.Add(gridComponent);
         Grid.SetRow(statusBarHost, 1);
+        tableArea.Children.Add(statusBarHost);
 
         var layout = new Grid
         {
-            RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto"),
-            RowSpacing = 8,
-            Margin = new Thickness(20, 10, 20, 20)
+            RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*"),
+            RowSpacing = 8
         };
 
         var title = new TextBlock
@@ -130,15 +112,25 @@ internal sealed class ServerSideAnalyticsExample : IExample
         };
         layout.Children.Add(title);
 
-        Grid.SetRow(controls, 1);
+        Grid.SetRow(controls, 2);
         layout.Children.Add(controls);
 
-        Grid.SetRow(infoText, 3);
+        // Instructions in row 1 to match client layout
+        Grid.SetRow(infoText, 1);
         layout.Children.Add(infoText);
 
-        // Stretch tableArea in the star row
-        Grid.SetRow(tableArea, 2);
-        layout.Children.Add(tableArea);
+        // Wrap the table area in a border like the client layout (row 3 star)
+        var gridHost = new Border
+        {
+            BorderBrush = Brushes.LightGray,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(4),
+            Background = Brushes.White,
+            Child = tableArea
+        };
+        Grid.SetRow(gridHost, 3);
+        layout.Children.Add(gridHost);
 
         refresh();
 
@@ -149,20 +141,9 @@ internal sealed class ServerSideAnalyticsExample : IExample
             Dispatcher.UIThread.Post(refresh);
         }
 
-        void OnSideBarStateChanged(object? sender, SideBarChangedEventArgs e)
-        {
-            if (!ReferenceEquals(e.Grid, grid))
-            {
-                return;
-            }
-
-            Dispatcher.UIThread.Post(refresh);
-        }
-
         void Cleanup()
         {
             grid.RowDataChanged -= OnRowDataChanged;
-            sideBarService.StateChanged -= OnSideBarStateChanged;
         }
     }
 
@@ -176,19 +157,11 @@ internal sealed class ServerSideAnalyticsExample : IExample
 
         var buttonRow = new WrapPanel();
 
-        var multiSort = CreateButton(() => { grid.ToggleMultiSortOverride(); refresh(); });
         var resetFilters = CreateButton(() => { grid.ClearGlobalFilter(); grid.ClearColumnFilters(); refresh(); });
         var resetSorting = CreateButton(() => { grid.SetSorting(Array.Empty<ColumnSort>()); refresh(); });
-        var toggleSideBar = CreateButton(() => { grid.ToggleSideBarVisible(); refresh(); });
-        var toggleStatusBar = CreateButton(() => { grid.ToggleStatusBarVisible(); refresh(); });
-        var openColumnsPanel = CreateButton(() => OpenColumnsPanel(grid));
 
-        buttonRow.Children.Add(multiSort);
         buttonRow.Children.Add(resetFilters);
         buttonRow.Children.Add(resetSorting);
-        buttonRow.Children.Add(toggleSideBar);
-        buttonRow.Children.Add(toggleStatusBar);
-        buttonRow.Children.Add(openColumnsPanel);
 
         panel.Children.Add(new TextBlock
         {
@@ -199,7 +172,7 @@ internal sealed class ServerSideAnalyticsExample : IExample
         });
 
         panel.Children.Add(buttonRow);
-        return new ControlsPanelContext(panel, multiSort, resetFilters, resetSorting, toggleSideBar, toggleStatusBar, openColumnsPanel);
+        return new ControlsPanelContext(panel, resetFilters, resetSorting);
 
         static Button CreateButton(Action action)
         {
@@ -220,12 +193,8 @@ internal sealed class ServerSideAnalyticsExample : IExample
         var filterCount = grid.State.ColumnFilters?.Filters.Count ?? 0;
         var sortCount = grid.State.Sorting?.Columns.Count ?? 0;
 
-        context.MultiSort.Content = $"⇅ Multi-Sort: {(grid.IsMultiSortEnabled() ? "ON" : "OFF")}";
         context.ResetFilters.Content = $"🧹 Reset Filters ({filterCount})";
         context.ResetSorting.Content = $"↕️ Reset Sorting ({sortCount})";
-        context.ToggleSideBar.Content = $"☰ Side Bar: {(grid.IsSideBarVisible() ? "Shown" : "Hidden")}";
-        context.ToggleStatusBar.Content = $"📊 Status Bar: {(grid.IsStatusBarVisible() ? "Shown" : "Hidden")}";
-        context.ColumnsPanel.Content = "📋 Open Columns Panel";
     }
 
     private static string BuildInfoText(SaGrid<Person> grid, InMemoryPersonServerDataSource dataSource)
@@ -237,9 +206,6 @@ internal sealed class ServerSideAnalyticsExample : IExample
         var hasGlobalFilter = grid.State.GlobalFilter != null;
         var hasColumnFilters = grid.State.ColumnFilters?.Filters.Count > 0;
         var multiSort = grid.IsMultiSortEnabled() ? "ON" : "OFF";
-        var sideBarState = grid.IsSideBarVisible() ? "Visible" : "Hidden";
-        var statusBarState = grid.IsStatusBarVisible() ? "Visible" : "Hidden";
-        var activePanel = grid.GetOpenedToolPanel() ?? "None";
 
         var selectedCells = grid.GetSelectedCells();
         var activeCell = grid.GetActiveCell();
@@ -253,7 +219,7 @@ internal sealed class ServerSideAnalyticsExample : IExample
         }
 
         return $"📊 Rows: ~{approxRows} (loaded {loadedRows}) | Columns: {visibleColumns}/{totalColumns} | Multi-Sort: {multiSort}\n" +
-               $"Filters: Global {(hasGlobalFilter ? "✅" : "❌")}, Column {(hasColumnFilters ? "✅" : "❌")} | Side Bar: {sideBarState} (Panel: {activePanel}) | Status Bar: {statusBarState} | {selectionInfo}";
+               $"Filters: Global {(hasGlobalFilter ? "✅" : "❌")}, Column {(hasColumnFilters ? "✅" : "❌")} | {selectionInfo}";
     }
 
     private static void OpenColumnsPanel(SaGrid<Person> grid)
@@ -300,6 +266,7 @@ internal sealed class ServerSideAnalyticsExample : IExample
         private readonly int _blockSize;
         private readonly HashSet<int> _loadedIndexes = new();
         private readonly object _sync = new();
+        private readonly string[] _depts = { "Engineering", "Marketing", "Sales", "HR", "Finance", "Operations", "Support" };
 
         public InMemoryPersonServerDataSource(IEnumerable<Person> rows, int blockSize)
         {
@@ -320,9 +287,32 @@ internal sealed class ServerSideAnalyticsExample : IExample
             }
         }
 
+        private void EnsureRows(int count)
+        {
+            lock (_sync)
+            {
+                while (_rows.Count < count)
+                {
+                    var i = _rows.Count + 1;
+                    var dept = _depts[i % _depts.Length];
+                    var first = $"User{i}";
+                    var last = $"Demo{i}";
+                    var age = 20 + (i % 45);
+                    var email = $"{first.ToLowerInvariant()}.{last.ToLowerInvariant()}@example.com";
+                    var isActive = (i % 3) != 0;
+                    _rows.Add(new Person(i, first, last, age, email, dept, isActive));
+                }
+            }
+        }
+
         public async Task<ServerSideRowsResult<Person>> GetRowsAsync(ServerSideRowsRequest request, CancellationToken cancellationToken = default)
         {
             await Task.Delay(120, cancellationToken);
+
+            // Grow backing data to cover the requested window for infinite scrolling
+            var start = Math.Max(0, request.StartRow);
+            var end = Math.Max(start, request.EndRow);
+            EnsureRows(end);
 
             IEnumerable<Person> query = _rows;
 
@@ -340,9 +330,9 @@ internal sealed class ServerSideAnalyticsExample : IExample
             query = ApplySorts(query, request.SortModel);
 
             var filtered = query.ToList();
-            var start = Math.Clamp(request.StartRow, 0, filtered.Count);
-            var end = Math.Clamp(request.EndRow, start, filtered.Count);
-            var rows = filtered.Skip(start).Take(end - start).ToList();
+            start = Math.Clamp(start, 0, filtered.Count);
+            end = Math.Clamp(end, start, filtered.Count);
+            var rows = filtered.Skip(start).Take(Math.Max(0, end - start)).ToList();
 
             lock (_sync)
             {
@@ -352,8 +342,8 @@ internal sealed class ServerSideAnalyticsExample : IExample
                 }
             }
 
-            var lastRow = end >= filtered.Count ? filtered.Count : (int?)null;
-            return new ServerSideRowsResult<Person>(rows, lastRow);
+            // Infinite scrolling: never set lastRow to force unbounded scroll in both directions
+            return new ServerSideRowsResult<Person>(rows, null);
         }
 
         private static IEnumerable<Person> ApplyColumnFilters(IEnumerable<Person> source, IReadOnlyDictionary<string, object?> filters)
@@ -444,10 +434,6 @@ internal sealed class ServerSideAnalyticsExample : IExample
 
     private sealed record ControlsPanelContext(
         StackPanel Panel,
-        Button MultiSort,
         Button ResetFilters,
-        Button ResetSorting,
-        Button ToggleSideBar,
-        Button ToggleStatusBar,
-        Button ColumnsPanel);
+        Button ResetSorting);
 }

@@ -25,6 +25,10 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
     private int _maxRequestedRowIndex = 0;
     private int? _lastRow;
     private IServerSideDataSource<TData>? _dataSource;
+    private const int DefaultRetainMarginBlocks = 2;
+    private const int DefaultMaxResidentBlocks = 24; // safety cap to keep memory bounded
+    private int _retainMarginBlocks;
+    private int _maxResidentBlocks;
 
     public event EventHandler? RowsChanged;
 
@@ -36,6 +40,10 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
     {
         _grid = grid ?? throw new ArgumentNullException(nameof(grid));
         BlockSize = Math.Max(1, blockSize);
+        // Read retention from meta when available
+        var opts = _grid.Options;
+        _retainMarginBlocks = ResolveIntMeta(opts, "serverSideRetentionMarginBlocks", DefaultRetainMarginBlocks);
+        _maxResidentBlocks = ResolveIntMeta(opts, "serverSideMaxResidentBlocks", DefaultMaxResidentBlocks);
     }
 
     public void SetDataSource(IServerSideDataSource<TData> dataSource, bool refresh = true)
@@ -96,6 +104,9 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
         {
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
+
+        // Opportunistic eviction to keep only a subset of blocks resident
+        EvictOutsideWindow(startBlock, endBlock);
     }
 
     public Row<TData>? GetRow(int index)
@@ -265,6 +276,74 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
         }
 
         RowsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void EvictOutsideWindow(int currentStartBlock, int currentEndBlock)
+    {
+        lock (_sync)
+        {
+        var windowStart = Math.Max(0, currentStartBlock - _retainMarginBlocks);
+        var windowEnd = currentEndBlock + _retainMarginBlocks;
+
+            var toRemove = _loadedBlocks
+                .Where(b => b < windowStart || b > windowEnd)
+                .ToList();
+
+            // If too many blocks resident, shrink further from farthest edges
+            if (_loadedBlocks.Count - toRemove.Count > _maxResidentBlocks)
+            {
+                var keep = new HashSet<int>(Enumerable.Range(windowStart, Math.Max(0, windowEnd - windowStart + 1)));
+                var ordered = _loadedBlocks
+                    .Where(b => !keep.Contains(b))
+                    .OrderBy(b => DistanceToWindow(b, windowStart, windowEnd))
+                    .ToList();
+
+                var extra = (_loadedBlocks.Count - _maxResidentBlocks) - toRemove.Count;
+                if (extra > 0)
+                {
+                    toRemove.AddRange(ordered.Take(extra));
+                }
+            }
+
+            foreach (var block in toRemove)
+            {
+                var start = block * BlockSize;
+                var end = start + BlockSize;
+                for (int i = start; i < end; i++)
+                {
+                    _rowCache.Remove(i);
+                }
+                _loadedBlocks.Remove(block);
+            }
+        }
+
+        static int DistanceToWindow(int block, int start, int end)
+        {
+            if (block < start) return start - block;
+            if (block > end) return block - end;
+            return 0;
+        }
+    }
+
+    public void ConfigureRetention(int retainMarginBlocks, int maxResidentBlocks)
+    {
+        _retainMarginBlocks = Math.Max(0, retainMarginBlocks);
+        _maxResidentBlocks = Math.Max(BlockSize > 0 ? 2 : 1, maxResidentBlocks);
+    }
+
+    private static int ResolveIntMeta(TableOptions<TData> options, string key, int fallback)
+    {
+        if (options.Meta != null && options.Meta.TryGetValue(key, out var value))
+        {
+            switch (value)
+            {
+                case int i:
+                    return i;
+                case string s when int.TryParse(s, out var parsed):
+                    return parsed;
+            }
+        }
+        return fallback;
     }
 
     private ServerSideRowsRequest CreateRequest(int startRow, int endRow)
