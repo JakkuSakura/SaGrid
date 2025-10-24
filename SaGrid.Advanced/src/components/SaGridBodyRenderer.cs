@@ -247,6 +247,14 @@ internal class SaGridBodyRenderer<TData>
                     container.Attach(_canvas);
                 }
 
+                // Always sync the panel layout from the latest snapshot before arranging
+                if (_layoutManager != null)
+                {
+                    if (container.Control is ColumnLayoutPanel lp)
+                    {
+                        lp.Layout = _layoutManager.Snapshot;
+                    }
+                }
                 Canvas.SetTop(container.Control, rowIndex * RowHeight);
                 Canvas.SetLeft(container.Control, 0);
                 container.Update(row, displayIndex, force);
@@ -377,7 +385,12 @@ internal class SaGridBodyRenderer<TData>
             }
 
             panel.Tag = rowId;
-            var container = new RowControlContainer(panel, cellVisuals, cellVisualsByColumn);
+            var container = new RowControlContainer(panel, cellVisuals, cellVisualsByColumn, _layoutManager);
+            // Ensure the row panel reflects the current snapshot immediately
+            if (_layoutManager != null)
+            {
+                panel.Layout = _layoutManager.Snapshot;
+            }
             container.UpdateWidth(initialWidth);
             return container;
         }
@@ -387,15 +400,18 @@ internal class SaGridBodyRenderer<TData>
             private readonly Control _control;
             private readonly List<IReusableCellVisual<TData>> _cellVisuals;
             private readonly Dictionary<string, IReusableCellVisual<TData>> _cellVisualsByColumn;
+            private readonly TableColumnLayoutManager<TData> _layoutManager;
 
             public RowControlContainer(
                 Control control,
                 List<IReusableCellVisual<TData>> cellVisuals,
-                Dictionary<string, IReusableCellVisual<TData>> cellVisualsByColumn)
+                Dictionary<string, IReusableCellVisual<TData>> cellVisualsByColumn,
+                TableColumnLayoutManager<TData> layoutManager)
             {
                 _control = control;
                 _cellVisuals = cellVisuals;
                 _cellVisualsByColumn = cellVisualsByColumn;
+                _layoutManager = layoutManager;
             }
 
             public Control Control => _control;
@@ -409,6 +425,12 @@ internal class SaGridBodyRenderer<TData>
                 }
 
                 canvas.Children.Add(_control);
+                if (_control is ColumnLayoutPanel lp)
+                {
+                    // Re-register so future Refresh updates the Layout on this panel
+                    _layoutManager.RegisterPanel(lp);
+                    lp.Layout = _layoutManager.Snapshot;
+                }
                 IsAttached = true;
             }
 

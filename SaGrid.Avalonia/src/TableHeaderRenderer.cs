@@ -16,6 +16,8 @@ public class TableHeaderRenderer<TData>
     private const double ResizeHandleWidth = 8d;
 
     private TableColumnLayoutManager<TData>? _currentLayoutManager;
+    private readonly Dictionary<Thumb, ResizeSession> _resizeSessions = new();
+    private readonly record struct ResizeSession(string ColumnId, IDisposable? Scope, double BaseWidth, double AccumDelta);
 
     public Control CreateHeader(Table<TData> table)
     {
@@ -243,31 +245,11 @@ public class TableHeaderRenderer<TData>
 
         thumb.PointerEntered += (_, _) => line.Background = new SolidColorBrush(Colors.DodgerBlue);
         thumb.PointerExited += (_, _) => ResetLine();
-        thumb.PointerCaptureLost += (_, _) => ResetLine();
+        thumb.PointerCaptureLost += (_, _) => EndResize(thumb, resetLine: true);
 
-        thumb.DragDelta += (_, e) =>
-        {
-            var delta = e.Vector.X;
-            if (Math.Abs(delta) < double.Epsilon)
-            {
-                return;
-            }
-
-            var currentWidth = column.Size;
-            var minWidth = (double)(column.ColumnDef.MinSize ?? 40);
-            var maxWidth = column.ColumnDef.MaxSize;
-
-            var updatedWidth = currentWidth + delta;
-            updatedWidth = Math.Max(updatedWidth, minWidth);
-            if (maxWidth.HasValue)
-            {
-                updatedWidth = Math.Min(updatedWidth, maxWidth.Value);
-            }
-
-            column.SetSize(updatedWidth);
-            _currentLayoutManager?.Refresh();
-            e.Handled = true;
-        };
+        thumb.DragStarted += (_, _) => BeginResize(thumb, column);
+        thumb.DragDelta += (_, e) => OnResizeDelta(thumb, column, e);
+        thumb.DragCompleted += (_, _) => EndResize(thumb, resetLine: true);
 
         thumb.DoubleTapped += (_, e) =>
         {
@@ -278,6 +260,60 @@ public class TableHeaderRenderer<TData>
         };
 
         return rail;
+    }
+
+    private void BeginResize(Thumb thumb, Column<TData> column)
+    {
+        if (_currentLayoutManager == null)
+        {
+            return;
+        }
+
+        var baseWidth = _currentLayoutManager.Snapshot.GetWidth(column.Id);
+        var scope = _currentLayoutManager.BeginUserResize(column.Id);
+        _resizeSessions[thumb] = new ResizeSession(column.Id, scope, baseWidth, 0);
+    }
+
+    private void OnResizeDelta(Thumb thumb, Column<TData> column, VectorEventArgs e)
+    {
+        if (_currentLayoutManager == null)
+        {
+            return;
+        }
+
+        if (!_resizeSessions.TryGetValue(thumb, out var session))
+        {
+            BeginResize(thumb, column);
+            session = _resizeSessions.GetValueOrDefault(thumb);
+        }
+
+        var newAccum = session.AccumDelta + e.Vector.X;
+
+        var min = column.ColumnDef.MinSize.HasValue ? Math.Max(column.ColumnDef.MinSize.Value, 1) : 40;
+        var max = column.ColumnDef.MaxSize.HasValue ? Math.Max(column.ColumnDef.MaxSize.Value, min) : double.PositiveInfinity;
+
+        var target = session.BaseWidth + newAccum;
+        if (!double.IsPositiveInfinity(max)) target = Math.Min(target, max);
+        target = Math.Max(target, min);
+
+        column.SetSize(target);
+        _currentLayoutManager.Refresh();
+
+        _resizeSessions[thumb] = session with { AccumDelta = newAccum };
+        e.Handled = true;
+    }
+
+    private void EndResize(Thumb thumb, bool resetLine)
+    {
+        if (_resizeSessions.TryGetValue(thumb, out var session))
+        {
+            session.Scope?.Dispose();
+            _resizeSessions.Remove(thumb);
+        }
+        if (resetLine)
+        {
+            // No-op here; caller handles visual line reset.
+        }
     }
 
     private void AttachSortingInteraction(
