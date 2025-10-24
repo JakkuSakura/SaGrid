@@ -14,6 +14,7 @@ using SaGrid.Advanced.Interfaces;
 using SaGrid.Advanced.Modules.StatusBar;
 using SaGrid.Advanced.RowModel;
 using SaGrid.Core;
+using SaGrid.Core.Models;
 
 namespace Examples.Examples.ServerSide;
 
@@ -27,8 +28,8 @@ internal sealed class ServerSideAnalyticsExample : IExample
     public ExampleHost Create()
     {
         var people = ExampleData.GenerateLargeDataset(1500); // TODO: investigate virtualization performance for larger data sets
-        var dataSource = new InMemoryPersonServerDataSource(people, blockSize: 150);
         var columns = ExampleData.CreateDefaultColumns();
+        var dataSource = new InMemoryPersonServerDataSource(people, columns, blockSize: 150);
 
         Action<TableState<Person>>? onStateChange = null;
 
@@ -261,10 +262,12 @@ internal sealed class ServerSideAnalyticsExample : IExample
         private readonly HashSet<int> _loadedIndexes = new();
         private readonly object _sync = new();
         private readonly string[] _depts = { "Engineering", "Marketing", "Sales", "HR", "Finance", "Operations", "Support" };
+        private readonly IReadOnlyList<ColumnDef<Person>> _columns;
 
-        public InMemoryPersonServerDataSource(IEnumerable<Person> rows, int blockSize)
+        public InMemoryPersonServerDataSource(IEnumerable<Person> rows, IReadOnlyList<ColumnDef<Person>> columns, int blockSize)
         {
             _rows = rows.ToList();
+            _columns = columns;
             _blockSize = Math.Max(1, blockSize);
         }
 
@@ -308,22 +311,20 @@ internal sealed class ServerSideAnalyticsExample : IExample
             var end = Math.Max(start, request.EndRow);
             EnsureRows(end);
 
-            IEnumerable<Person> query = _rows;
-
-            if (request.FilterModel.TryGetValue("__global", out var globalFilter) &&
-                globalFilter is string term && !string.IsNullOrWhiteSpace(term))
+            // Use core Table to compute filtered/sorted rows for exact parity with client pipeline
+            var state = BuildStateFromRequest(request);
+            var options = new TableOptions<Person>
             {
-                var lowered = term.Trim().ToLowerInvariant();
-                query = query.Where(p => p.FirstName.ToLowerInvariant().Contains(lowered)
-                                         || p.LastName.ToLowerInvariant().Contains(lowered)
-                                         || p.Email.ToLowerInvariant().Contains(lowered)
-                                         || p.Department.ToLowerInvariant().Contains(lowered));
-            }
+                Data = _rows,
+                Columns = _columns,
+                EnableSorting = true,
+                EnableGlobalFilter = true,
+                EnableColumnFilters = true,
+                State = state
+            };
 
-            query = ApplyColumnFilters(query, request.FilterModel);
-            query = ApplySorts(query, request.SortModel);
-
-            var filtered = query.ToList();
+            var table = new Table<Person>(options);
+            var filtered = table.RowModel.FlatRows.Select(r => r.Original).ToList();
             start = Math.Clamp(start, 0, filtered.Count);
             end = Math.Clamp(end, start, filtered.Count);
             var rows = filtered.Skip(start).Take(Math.Max(0, end - start)).ToList();
@@ -340,154 +341,31 @@ internal sealed class ServerSideAnalyticsExample : IExample
             return new ServerSideRowsResult<Person>(rows, null);
         }
 
-        private static IEnumerable<Person> ApplyColumnFilters(IEnumerable<Person> source, IReadOnlyDictionary<string, object?> filters)
+        private static TableState<Person> BuildStateFromRequest(ServerSideRowsRequest request)
         {
-            if (filters == null)
+            var filters = new List<ColumnFilter>();
+            object? global = null;
+            foreach (var kv in request.FilterModel)
             {
-                return source;
-            }
-
-            IEnumerable<Person> query = source;
-
-            foreach (var filter in filters)
-            {
-                if (string.Equals(filter.Key, "__global", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(kv.Key, "__global", StringComparison.OrdinalIgnoreCase))
                 {
-                    continue;
+                    global = kv.Value;
                 }
-
-                if (filter.Value is null)
+                else
                 {
-                    continue;
-                }
-
-                // Text contains semantics for scalar string filter values
-                if (filter.Value is string s && !string.IsNullOrWhiteSpace(s))
-                {
-                    var term = s.Trim();
-                    query = query.Where(row =>
-                    {
-                        var value = GetFieldValue(row, filter.Key);
-                        return (value?.ToString() ?? string.Empty)
-                            .IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
-                    });
-                    continue;
-                }
-
-                // Boolean equality
-                if (filter.Value is bool b)
-                {
-                    query = query.Where(row =>
-                    {
-                        var value = GetFieldValue(row, filter.Key);
-                        return value is bool vb && vb == b;
-                    });
-                    continue;
-                }
-
-                // Numeric range: support { min, max } object/dictionary
-                if (filter.Value is IReadOnlyDictionary<string, object?> dict)
-                {
-                    double minParsed = 0, maxParsed = 0;
-                    var hasMin = dict.TryGetValue("min", out var minObj) && TryToDouble(minObj, out minParsed);
-                    var hasMax = dict.TryGetValue("max", out var maxObj) && TryToDouble(maxObj, out maxParsed);
-                    if (hasMin || hasMax)
-                    {
-                        double? minVal = hasMin ? minParsed : null;
-                        double? maxVal = hasMax ? maxParsed : null;
-                        query = query.Where(row =>
-                        {
-                            var value = GetFieldValue(row, filter.Key);
-                            if (!TryToDouble(value, out var v)) return false;
-                            if (minVal.HasValue && v < minVal.Value) return false;
-                            if (maxVal.HasValue && v > maxVal.Value) return false;
-                            return true;
-                        });
-                        continue;
-                    }
-                }
-
-                // Set membership (multi-select) semantics
-                var acceptedValues = ExtractFilterValues(filter.Value);
-                if (acceptedValues != null && acceptedValues.Count > 0)
-                {
-                    query = query.Where(row => acceptedValues.Contains(GetFieldValue(row, filter.Key)?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase));
+                    filters.Add(new ColumnFilter(kv.Key, kv.Value));
                 }
             }
 
-            return query;
-        }
+            var sorting = new SortingState(request.SortModel?.ToList() ?? new List<ColumnSort>());
+            var columnFilters = filters.Count > 0 ? new ColumnFiltersState(filters) : null;
+            var globalFilter = global != null ? new GlobalFilterState(global) : null;
 
-        private static bool TryToDouble(object? value, out double result)
-        {
-            switch (value)
+            return new TableState<Person>
             {
-                case null:
-                    result = 0; return false;
-                case double d:
-                    result = d; return true;
-                case float f:
-                    result = f; return true;
-                case int i:
-                    result = i; return true;
-                case long l:
-                    result = l; return true;
-                case string s when double.TryParse(s, out var parsed):
-                    result = parsed; return true;
-                default:
-                    result = 0; return false;
-            }
-        }
-
-        private static IReadOnlyCollection<string>? ExtractFilterValues(object value)
-        {
-            return value switch
-            {
-                string s => new[] { s },
-                bool b => new[] { b.ToString() },
-                IEnumerable<string> enumerable => enumerable.ToList(),
-                IEnumerable<object?> objects => objects.Select(o => o?.ToString() ?? string.Empty).ToList(),
-                _ => null
-            };
-        }
-
-        private static IEnumerable<Person> ApplySorts(IEnumerable<Person> source, IReadOnlyList<ColumnSort> sortModel)
-        {
-            if (sortModel == null || sortModel.Count == 0)
-            {
-                return source;
-            }
-
-            IOrderedEnumerable<Person>? ordered = null;
-
-            foreach (var sort in sortModel)
-            {
-                Func<Person, object?> keySelector = row => GetFieldValue(row, sort.Id);
-
-                ordered = ordered == null
-                    ? (sort.Direction == SortDirection.Descending
-                        ? source.OrderByDescending(keySelector)
-                        : source.OrderBy(keySelector))
-                    : (sort.Direction == SortDirection.Descending
-                        ? ordered.ThenByDescending(keySelector)
-                        : ordered.ThenBy(keySelector));
-            }
-
-            return ordered ?? source;
-        }
-
-        private static object? GetFieldValue(Person row, string columnId)
-        {
-            return columnId switch
-            {
-                "id" => row.Id,
-                "firstName" => row.FirstName,
-                "lastName" => row.LastName,
-                "age" => row.Age,
-                "email" => row.Email,
-                "department" => row.Department,
-                "isActive" => row.IsActive,
-                _ => null
+                Sorting = sorting,
+                ColumnFilters = columnFilters,
+                GlobalFilter = globalFilter
             };
         }
     }

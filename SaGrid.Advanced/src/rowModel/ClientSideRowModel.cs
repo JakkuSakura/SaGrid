@@ -349,10 +349,20 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
         switch (filter.Value)
         {
             case null:
+                // Empty status: accept all
                 return true;
             case SetFilterState setState:
                 return EvaluateSetFilter(cellString, setState);
+            case bool b:
+                // True: only true, False: only false
+                return cellValue is bool cb && cb == b;
             case string text when !string.IsNullOrWhiteSpace(text):
+                // If cell is boolean and filter parses to bool, apply typed equality
+                if (cellValue is bool cb2 && bool.TryParse(text, out var parsedBool))
+                {
+                    return cb2 == parsedBool;
+                }
+                // Fallback to case-insensitive contains for non-boolean cells
                 return cellString.Contains(text, StringComparison.OrdinalIgnoreCase);
             case Func<object?, bool> predicate:
                 return predicate(cellValue);

@@ -210,7 +210,10 @@ internal class SaGridBodyRenderer<TData>
                 _hasRealRows = true;
             }
 
-            _canvas.Height = totalRows * RowHeight;
+            // Keep canvas tall enough to allow fetching even when approximate count collapses
+            var preferred = _host.GetPreferredFetchSize();
+            var minRowsForViewport = Math.Max(totalRows, Math.Max(0, (int)(_scrollViewer.Offset.Y / RowHeight)) + preferred);
+            _canvas.Height = minRowsForViewport * RowHeight;
 
             if (force)
             {
@@ -228,7 +231,10 @@ internal class SaGridBodyRenderer<TData>
 
             if (endIndex <= startIndex)
             {
-                endIndex = System.Math.Min(totalRows, startIndex + _host.GetPreferredFetchSize());
+                // If approx count is behind the viewport, proactively request the current window
+                var fetch = _host.GetPreferredFetchSize();
+                _ = _host.EnsureDataRangeAsync(startIndex, startIndex + fetch);
+                endIndex = startIndex + fetch;
             }
 
             var visibleRowIds = new HashSet<string>();

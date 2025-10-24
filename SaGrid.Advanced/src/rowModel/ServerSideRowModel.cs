@@ -373,7 +373,9 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
             _loadedBlocks.Clear();
             _lastRow = null;
             _maxLoadedRowIndex = -1;
-            _maxRequestedRowIndex = 0;
+            // Preserve _maxRequestedRowIndex so approximate row count remains large enough
+            // for viewports scrolled deep into the dataset. This lets the UI request
+            // the currently visible range immediately after a purge.
         }
 
         RowsChanged?.Invoke(this, EventArgs.Empty);
