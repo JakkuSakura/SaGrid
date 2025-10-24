@@ -4,6 +4,10 @@
 
 Built on the proven foundation of TanStack Table, SaGrid brings enterprise-grade table functionality to C# with unmatched performance, type safety, and developer experience. Whether you're building desktop apps with Avalonia or need a headless solution, SaGrid delivers.
 
+## 🖼️ Preview
+
+![View screenshot on Imgur](https://imgur.com/f3Akvbv.png)
+
 ## 🎯 What Makes SaGrid Special
 
 ✨ **TanStack for C#** - Native C# implementation of the beloved TanStack Table  
