@@ -78,7 +78,7 @@ internal sealed class BatchEditingExample : IExample
             }
         };
 
-        return new ExampleHost(new ScrollViewer { Content = layout });
+        return new ExampleHost(layout);
     }
 
     private static Button CreateButton(string label, Action onClick)

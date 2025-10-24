@@ -134,7 +134,7 @@ internal sealed class ServerSideAnalyticsExample : IExample
 
         refresh();
 
-        return new ExampleHost(new ScrollViewer { Content = layout }, Cleanup);
+        return new ExampleHost(layout, Cleanup);
 
         void OnRowDataChanged(object? sender, EventArgs e)
         {
