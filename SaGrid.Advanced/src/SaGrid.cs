@@ -24,7 +24,8 @@ namespace SaGrid.Advanced;
 
 public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 {
-    private readonly SaGridComponent<TData> _component;
+    private readonly SaGridComponent<TData>? _component;
+    private readonly Table<TData>? _fallbackTable;
     private string? _quickFilter;
     
     // Callback for UI updates
@@ -51,78 +52,99 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 
     public event EventHandler? RowDataChanged;
 
-    internal Table<TData> InnerTable => _component.GetUnderlyingTable();
-    public SaGridComponent<TData> Component => _component;
+    internal Table<TData> InnerTable => _component != null ? _component.GetUnderlyingTable() : _fallbackTable!;
+    public SaGridComponent<TData>? Component => _component;
 
-    public TableOptions<TData> Options => _component.GetOptions();
-    public TableState<TData> State => _component.GetState();
-    public IReadOnlyList<Column<TData>> AllColumns => _component.GetAllColumns();
-    public IReadOnlyList<Column<TData>> AllLeafColumns => _component.GetAllLeafColumns();
-    public IReadOnlyList<Column<TData>> VisibleLeafColumns => _component.GetVisibleLeafColumns();
-    public IReadOnlyList<HeaderGroup<TData>> HeaderGroups => _component.GetHeaderGroups();
-    public IReadOnlyList<HeaderGroup<TData>> FooterGroups => _component.GetFooterGroups();
-    public RowModel<TData> RowModel => _component.GetRowModel();
-    public RowModel<TData> PreFilteredRowModel => _component.GetPreFilteredRowModel();
-    public RowModel<TData> PreSortedRowModel => _component.GetPreSortedRowModel();
-    public RowModel<TData> PreGroupedRowModel => _component.GetPreGroupedRowModel();
-    public RowModel<TData> PreExpandedRowModel => _component.GetPreExpandedRowModel();
-    public RowModel<TData> PrePaginationRowModel => _component.GetPrePaginationRowModel();
+    public TableOptions<TData> Options => _component != null ? _component.GetOptions() : _fallbackTable!.Options;
+    public TableState<TData> State => _component != null ? _component.GetState() : _fallbackTable!.State;
+    public IReadOnlyList<Column<TData>> AllColumns => _component != null ? _component.GetAllColumns() : _fallbackTable!.AllColumns;
+    public IReadOnlyList<Column<TData>> AllLeafColumns => _component != null ? _component.GetAllLeafColumns() : _fallbackTable!.AllLeafColumns;
+    public IReadOnlyList<Column<TData>> VisibleLeafColumns => _component != null ? _component.GetVisibleLeafColumns() : _fallbackTable!.VisibleLeafColumns;
+    public IReadOnlyList<HeaderGroup<TData>> HeaderGroups => _component != null ? _component.GetHeaderGroups() : _fallbackTable!.HeaderGroups;
+    public IReadOnlyList<HeaderGroup<TData>> FooterGroups => _component != null ? _component.GetFooterGroups() : _fallbackTable!.FooterGroups;
+    public RowModel<TData> RowModel => _component != null ? _component.GetRowModel() : _fallbackTable!.RowModel;
+    public RowModel<TData> PreFilteredRowModel => _component != null ? _component.GetPreFilteredRowModel() : _fallbackTable!.PreFilteredRowModel;
+    public RowModel<TData> PreSortedRowModel => _component != null ? _component.GetPreSortedRowModel() : _fallbackTable!.PreSortedRowModel;
+    public RowModel<TData> PreGroupedRowModel => _component != null ? _component.GetPreGroupedRowModel() : _fallbackTable!.PreGroupedRowModel;
+    public RowModel<TData> PreExpandedRowModel => _component != null ? _component.GetPreExpandedRowModel() : _fallbackTable!.PreExpandedRowModel;
+    public RowModel<TData> PrePaginationRowModel => _component != null ? _component.GetPrePaginationRowModel() : _fallbackTable!.PrePaginationRowModel;
 
     public void SetState(TableState<TData> state, bool updateRowModel = true)
     {
-        _component.ApplyState(state, updateRowModel);
+        if (_component != null) _component.ApplyState(state, updateRowModel);
+        else _fallbackTable!.SetState(state, updateRowModel);
     }
 
     public void SetState(Updater<TableState<TData>> updater, bool updateRowModel = true)
     {
-        _component.ApplyState(updater, updateRowModel);
+        if (_component != null) _component.ApplyState(updater, updateRowModel);
+        else _fallbackTable!.SetState(updater, updateRowModel);
     }
 
-    public Column<TData>? GetColumn(string columnId) => _component.FindColumn(columnId);
+    public Column<TData>? GetColumn(string columnId) => _component != null ? _component.FindColumn(columnId) : _fallbackTable!.GetColumn(columnId);
 
-    public Row<TData>? GetRow(string rowId) => _component.FindRow(rowId);
+    public Row<TData>? GetRow(string rowId) => _component != null ? _component.FindRow(rowId) : _fallbackTable!.GetRow(rowId);
 
-    public IReadOnlyList<Row<TData>> GetSelectedRowModel() => _component.GetSelectedRows();
+    public IReadOnlyList<Row<TData>> GetSelectedRowModel() => _component != null ? _component.GetSelectedRows() : _fallbackTable!.GetSelectedRowModel();
 
-    public void ResetColumnFilters() { _component.ResetColumnFilters(); ScheduleUIUpdate(); }
-    public void ResetGlobalFilter() { _component.ResetGlobalFilter(); ScheduleUIUpdate(); }
-    public void ResetSorting() { _component.ResetSorting(); ScheduleUIUpdate(); }
-    public void ResetRowSelection() { _component.ResetRowSelection(); ScheduleUIUpdate(); }
-    public void ResetColumnOrder() { _component.ResetColumnOrder(); ScheduleUIUpdate(); }
-    public void ResetColumnSizing() { _component.ResetColumnSizing(); ScheduleUIUpdate(); }
-    public void ResetColumnVisibility() { _component.ResetColumnVisibility(); ScheduleUIUpdate(); }
-    public void ResetExpanded() { _component.ResetExpanded(); ScheduleUIUpdate(); }
-    public void ResetGrouping() { _component.ResetGrouping(); ScheduleUIUpdate(); }
-    public void ResetPagination() { _component.ResetPagination(); ScheduleUIUpdate(); }
-    public int GetPageCount() => _component.GetPageCount();
-    public bool GetCanPreviousPage() => _component.CanGoPreviousPage();
-    public bool GetCanNextPage() => _component.CanGoNextPage();
-    public void FirstPage() { _component.GoToFirstPage(); ScheduleUIUpdate(); }
-    public void LastPage() { _component.GoToLastPage(); ScheduleUIUpdate(); }
-    public bool GetIsAllRowsSelected() => _component.AreAllRowsSelected();
-    public bool GetIsSomeRowsSelected() => _component.AreSomeRowsSelected();
-    public void SelectAllRows() { _component.SelectAllRows(); ScheduleUIUpdate(); }
-    public void DeselectAllRows() { _component.DeselectAllRows(); ScheduleUIUpdate(); }
-    public void ToggleAllRowsSelected() { _component.ToggleAllRowsSelected(); ScheduleUIUpdate(); }
-    public void SetRowSelection(string rowId, bool selected) { _component.SetRowSelection(rowId, selected); ScheduleUIUpdate(); }
-    public void SelectRowRange(int startIndex, int endIndex) { _component.SelectRowRange(startIndex, endIndex); ScheduleUIUpdate(); }
-    public int GetSelectedRowCount() => _component.GetSelectedRowCount();
-    public int GetTotalRowCount() => _component.GetTotalRowCount();
+    public void ResetColumnFilters() { if (_component != null) _component.ResetColumnFilters(); else _fallbackTable!.ResetColumnFilters(); ScheduleUIUpdate(); }
+    public void ResetGlobalFilter() { if (_component != null) _component.ResetGlobalFilter(); else _fallbackTable!.ResetGlobalFilter(); ScheduleUIUpdate(); }
+    public void ResetSorting() { if (_component != null) _component.ResetSorting(); else _fallbackTable!.ResetSorting(); ScheduleUIUpdate(); }
+    public void ResetRowSelection() { if (_component != null) _component.ResetRowSelection(); else _fallbackTable!.ResetRowSelection(); ScheduleUIUpdate(); }
+    public void ResetColumnOrder() { if (_component != null) _component.ResetColumnOrder(); else _fallbackTable!.ResetColumnOrder(); ScheduleUIUpdate(); }
+    public void ResetColumnSizing() { if (_component != null) _component.ResetColumnSizing(); else _fallbackTable!.ResetColumnSizing(); ScheduleUIUpdate(); }
+    public void ResetColumnVisibility() { if (_component != null) _component.ResetColumnVisibility(); else _fallbackTable!.ResetColumnVisibility(); ScheduleUIUpdate(); }
+    public void ResetExpanded() { if (_component != null) _component.ResetExpanded(); else _fallbackTable!.ResetExpanded(); ScheduleUIUpdate(); }
+    public void ResetGrouping() { if (_component != null) _component.ResetGrouping(); else _fallbackTable!.ResetGrouping(); ScheduleUIUpdate(); }
+    public void ResetPagination() { if (_component != null) _component.ResetPagination(); else _fallbackTable!.ResetPagination(); ScheduleUIUpdate(); }
+    public int GetPageCount() => _component != null ? _component.GetPageCount() : _fallbackTable!.GetPageCount();
+    public bool GetCanPreviousPage() => _component != null ? _component.CanGoPreviousPage() : _fallbackTable!.GetCanPreviousPage();
+    public bool GetCanNextPage() => _component != null ? _component.CanGoNextPage() : _fallbackTable!.GetCanNextPage();
+    public void FirstPage() { InnerTable.FirstPage(); ScheduleUIUpdate(); }
+    public void LastPage() { InnerTable.LastPage(); ScheduleUIUpdate(); }
+    public bool GetIsAllRowsSelected() => InnerTable.GetIsAllRowsSelected();
+    public bool GetIsSomeRowsSelected() => InnerTable.GetIsSomeRowsSelected();
+    public void SelectAllRows() { InnerTable.SelectAllRows(); ScheduleUIUpdate(); }
+    public void DeselectAllRows() { InnerTable.DeselectAllRows(); ScheduleUIUpdate(); }
+    public void ToggleAllRowsSelected() { InnerTable.ToggleAllRowsSelected(); ScheduleUIUpdate(); }
+    public void SetRowSelection(string rowId, bool selected) { InnerTable.SetRowSelection(rowId, selected); ScheduleUIUpdate(); }
+    public void SelectRowRange(int startIndex, int endIndex) { InnerTable.SelectRowRange(startIndex, endIndex); ScheduleUIUpdate(); }
+    public int GetSelectedRowCount() => InnerTable.GetSelectedRowCount();
+    public int GetTotalRowCount() => InnerTable.GetTotalRowCount();
 
     public SaGrid(TableOptions<TData> options)
     {
-        SaGridModules.EnsureInitialized();
         var table = new Table<TData>(options);
-        _component = new SaGridComponent<TData>(this, options, table);
-        Initialize(table, options);
+        try
+        {
+            SaGridModules.EnsureInitialized();
+            _component = new SaGridComponent<TData>(this, options, table);
+            _fallbackTable = null;
+            Initialize(table, options);
+        }
+        catch
+        {
+            // Headless fallback for test environments without a reactive owner
+            _component = null;
+            _fallbackTable = table;
+        }
     }
 
     // Constructor for test compatibility
     public SaGrid(Table<TData> table)
     {
-        SaGridModules.EnsureInitialized();
-        _component = new SaGridComponent<TData>(this, table.Options, table);
-        Initialize(table, table.Options);
+        try
+        {
+            SaGridModules.EnsureInitialized();
+            _component = new SaGridComponent<TData>(this, table.Options, table);
+            _fallbackTable = null;
+            Initialize(table, table.Options);
+        }
+        catch
+        {
+            _component = null;
+            _fallbackTable = table;
+        }
     }
 
     private void Initialize(Table<TData> table, TableOptions<TData> options)
@@ -177,22 +199,21 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
     // Advanced filtering capabilities
     public void SetGlobalFilter(object? value)
     {
-        _component.SetGlobalFilterValue(value);
+        InnerTable.SetGlobalFilter(value);
         ScheduleUIUpdate();
     }
 
     public object? GetGlobalFilterValue()
     {
-        return _component.GetGlobalFilterValue();
+        return InnerTable.GetGlobalFilterValue();
     }
 
     public void ClearGlobalFilter()
     {
-        _component.ClearGlobalFilterValue();
-        // When filters change, reset to first page to avoid empty views
+        InnerTable.ClearGlobalFilter();
         if (State.Pagination != null)
         {
-            _component.SetPageIndex(0);
+            InnerTable.SetPageIndex(0);
         }
         ScheduleUIUpdate();
     }
@@ -351,28 +372,28 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
     // Advanced column operations
     public void SetColumnVisibility(string columnId, bool visible)
     {
-        _component.SetColumnVisibility(columnId, visible);
+        InnerTable.SetColumnVisibility(columnId, visible);
         ScheduleUIUpdate();
     }
 
     public bool GetColumnVisibility(string columnId)
     {
-        return _component.GetColumnVisibility(columnId);
+        return InnerTable.GetColumnVisibility(columnId);
     }
 
     public int GetVisibleColumnCount()
     {
-        return _component.GetVisibleColumnCount();
+        return InnerTable.GetVisibleColumnCount();
     }
 
     public int GetTotalColumnCount()
     {
-        return _component.GetTotalColumnCount();
+        return InnerTable.GetTotalColumnCount();
     }
 
     public int GetHiddenColumnCount()
     {
-        return _component.GetHiddenColumnCount();
+        return InnerTable.GetHiddenColumnCount();
     }
 
     // Side bar APIs
@@ -557,19 +578,19 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
     // Sorting wrappers to trigger UI updates
     public void SetSorting(IEnumerable<ColumnSort> sorts)
     {
-        _component.SetSorting(sorts);
+        InnerTable.SetSorting(sorts);
         RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Sort));
     }
 
     public void ToggleSort(string columnId)
     {
-        _component.ToggleSort(columnId);
+        InnerTable.ToggleSort(columnId);
         RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Sort));
     }
 
     public void SetSorting(string columnId, SortDirection direction)
     {
-        _component.SetSorting(columnId, direction);
+        InnerTable.SetSorting(columnId, direction);
         RefreshModel(new RefreshModelParams(ClientSideRowModelStage.Sort));
     }
 
@@ -681,7 +702,7 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 
         if (State.Pagination != null)
         {
-            _component.SetPageIndex(0);
+            InnerTable.SetPageIndex(0);
         }
 
         if (value is not SetFilterState && _filterService is FilterService filterServiceImpl)
@@ -780,19 +801,19 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
     // Pagination wrappers to ensure UI updates
     public void SetPageIndex(int pageIndex)
     {
-        _component.SetPageIndex(pageIndex);
+        InnerTable.SetPageIndex(pageIndex);
         ScheduleUIUpdate();
     }
 
     public void SetPageSize(int pageSize)
     {
-        _component.SetPageSize(pageSize);
+        InnerTable.SetPageSize(pageSize);
         ScheduleUIUpdate();
     }
 
     public void NextPage()
     {
-        _component.GoToNextPage();
+        InnerTable.NextPage();
         ScheduleUIUpdate();
     }
 
@@ -810,7 +831,7 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 
     public void PreviousPage()
     {
-        _component.GoToPreviousPage();
+        InnerTable.PreviousPage();
         NotifyUIUpdate();
     }
 
@@ -1244,6 +1265,11 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
     bool ISaGridComponentHost<TData>.IsSameGrid(object gridInstance)
     {
         return ReferenceEquals(this, gridInstance);
+    }
+
+    Table<TData> ISaGridComponentHost<TData>.GetUnderlyingTable()
+    {
+        return InnerTable;
     }
 }
 

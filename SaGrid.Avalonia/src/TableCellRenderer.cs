@@ -24,7 +24,7 @@ public class TableCellRenderer<TData>
             BorderThickness = new Thickness(0, 0, 1, 1),
             BorderBrush = Brushes.LightGray,
             Background = background,
-            Height = 30,
+            Height = double.NaN,
             Child = new TextBlock
             {
                 Text = content,

@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using SaGrid.Core.Models;
 
 namespace SaGrid.Avalonia;
@@ -15,30 +16,14 @@ public class TableBodyRenderer<TData>
 
     public Control CreateBody(Table<TData> table, TableColumnLayoutManager<TData> layoutManager)
     {
-        var stack = new StackPanel { Orientation = Orientation.Vertical };
-
-        foreach (var row in table.RowModel.Rows)
+        var panel = new VirtualizedBodyPanel<TData>(table, layoutManager);
+        var viewer = new ScrollViewer
         {
-            stack.Children.Add(CreateRow(table, row, layoutManager));
-        }
+            Content = panel,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
 
-        return new ScrollViewer { Content = stack };
-    }
-
-    private Control CreateRow(Table<TData> table, Row<TData> row, TableColumnLayoutManager<TData> layoutManager)
-    {
-        var panel = layoutManager.CreatePanel();
-        panel.Height = 30;
-
-        var displayIndex = row.DisplayIndex >= 0 ? row.DisplayIndex : row.Index;
-
-        foreach (var column in table.VisibleLeafColumns)
-        {
-            var cell = _cellRenderer.CreateCell(table, row, (Column<TData>)column, displayIndex);
-            ColumnLayoutPanel.SetColumnId(cell, column.Id);
-            panel.Children.Add(cell);
-        }
-
-        return panel;
+        return viewer;
     }
 }

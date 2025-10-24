@@ -34,6 +34,7 @@ public interface ISaGridComponentHost<TData>
     Row<TData>? TryGetDisplayedRow(int index);
     int GetApproximateRowCount();
     RowModelType GetActiveRowModelType();
+    Table<TData> GetUnderlyingTable();
     void SelectCell(int rowIndex, string columnId, bool addToSelection);
     bool IsCellSelected(int rowIndex, string columnId);
     (int RowIndex, string ColumnId)? GetActiveCell();

@@ -396,7 +396,8 @@ internal class SaGridHeaderRenderer<TData>
         bool isDragging = false;
         double lastPointerX = 0;
         double pointerPressX = 0;
-        double primaryStartWidth = column.Size;
+        // Use the current snapshot width as the resize baseline to avoid drift
+        double primaryStartWidth = _layoutManager?.Snapshot.GetWidth(column.Id) ?? column.Size;
         Column<TData>? neighbourColumn = null;
         IDisposable? resizeScope = null;
         Visual? dragReferenceVisual = null;

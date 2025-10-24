@@ -55,6 +55,7 @@ public class SaGridComponent<TData> : SolidTable<TData>
     private DragValidationService<TData>? _dragValidationService;
     private double _lastViewportWidth = double.NaN;
     private double _lastTargetWidth = double.NaN;
+    private bool _columnResizeListenerHooked;
 
     private (Func<Table<TData>> Getter, Action<Table<TData>> Setter) TableSignalValue =>
         TableSignal ?? throw new InvalidOperationException("Table signal not initialized.");
@@ -430,7 +431,27 @@ public class SaGridComponent<TData> : SolidTable<TData>
         if (_dragDropManager != null)
         {
             _headerRenderer.EnableInteractivity(_dragDropManager, _host.GetColumnInteractiveService());
+            HookColumnResizeLiveUpdates();
         }
+    }
+
+    private void HookColumnResizeLiveUpdates()
+    {
+        if (_columnResizeListenerHooked)
+        {
+            return;
+        }
+
+        var events = _host.GetEventService();
+        events.AddEventListener<Interactive.ColumnResizedEventArgs<TData>>("columnResized", _ =>
+        {
+            // Snapshot-first: refresh snapshot and row layout immediately on resize deltas
+            _layoutManager?.Refresh();
+            _virtualizedRowsControl?.RefreshLayout();
+            UpdateHorizontalLayoutMetrics();
+        });
+
+        _columnResizeListenerHooked = true;
     }
 
     private void HandleHeaderStateChanges()

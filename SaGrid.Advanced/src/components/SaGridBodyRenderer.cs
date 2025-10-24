@@ -40,6 +40,17 @@ internal class SaGridBodyRenderer<TData>
         return new VirtualizedRowsControl(host, table, initialRows, _cellRenderer, layoutManager, hostSignalGetter, selectionSignalGetter);
     }
 
+    // Convenience overload for tests that pass (grid, null, null)
+    public Control CreateBody(
+        ISaGridComponentHost<TData> host,
+        Table<TData>? table,
+        TableColumnLayoutManager<TData>? layoutManager)
+    {
+        var resolvedTable = table ?? host.GetUnderlyingTable();
+        var resolvedManager = layoutManager ?? new TableColumnLayoutManager<TData>(resolvedTable);
+        return CreateBody(host, resolvedTable, resolvedManager, null, null);
+    }
+
     private static IEnumerable<Row<TData>> FlattenRows(IReadOnlyList<Row<TData>> rows)
     {
         foreach (var row in rows)
@@ -247,13 +258,10 @@ internal class SaGridBodyRenderer<TData>
                     container.Attach(_canvas);
                 }
 
-                // Always sync the panel layout from the latest snapshot before arranging
-                if (_layoutManager != null)
+                // Always sync the row panel's layout snapshot before arranging
+                if (_layoutManager != null && container.Control is ColumnLayoutPanel lp)
                 {
-                    if (container.Control is ColumnLayoutPanel lp)
-                    {
-                        lp.Layout = _layoutManager.Snapshot;
-                    }
+                    lp.Layout = _layoutManager.Snapshot;
                 }
                 Canvas.SetTop(container.Control, rowIndex * RowHeight);
                 Canvas.SetLeft(container.Control, 0);
@@ -357,8 +365,9 @@ internal class SaGridBodyRenderer<TData>
 
         private RowControlContainer CreateRowControl(Row<TData> row, int displayIndex, string rowId)
         {
-            var panel = _layoutManager.CreatePanel();
-            panel.Height = RowHeight;
+            var panel = new ColumnLayoutPanel { Layout = _layoutManager.Snapshot, Height = RowHeight };
+            // Share the same manager with header: register so snapshot changes propagate instantly
+            _layoutManager.RegisterPanel(panel);
             var initialWidth = _layoutManager.Snapshot.TotalWidth;
             if (!double.IsNaN(initialWidth) && !double.IsInfinity(initialWidth) && initialWidth > 0)
             {
@@ -387,10 +396,7 @@ internal class SaGridBodyRenderer<TData>
             panel.Tag = rowId;
             var container = new RowControlContainer(panel, cellVisuals, cellVisualsByColumn, _layoutManager);
             // Ensure the row panel reflects the current snapshot immediately
-            if (_layoutManager != null)
-            {
-                panel.Layout = _layoutManager.Snapshot;
-            }
+            if (_layoutManager != null) panel.Layout = _layoutManager.Snapshot;
             container.UpdateWidth(initialWidth);
             return container;
         }
@@ -425,12 +431,7 @@ internal class SaGridBodyRenderer<TData>
                 }
 
                 canvas.Children.Add(_control);
-                if (_control is ColumnLayoutPanel lp)
-                {
-                    // Re-register so future Refresh updates the Layout on this panel
-                    _layoutManager.RegisterPanel(lp);
-                    lp.Layout = _layoutManager.Snapshot;
-                }
+                if (_control is ColumnLayoutPanel lp) lp.Layout = _layoutManager.Snapshot;
                 IsAttached = true;
             }
 
@@ -474,6 +475,8 @@ internal class SaGridBodyRenderer<TData>
                 return _cellVisualsByColumn.TryGetValue(columnId, out cell);
             }
         }
+
+        // Row panels now use ColumnLayoutPanel directly to inherit snapshot-changed invalidation
 
         private static Control CreatePlaceholderRow()
         {

@@ -338,6 +338,8 @@ public static class PaginationExtensions
 public class VirtualizationViewport
 {
     public int StartIndex { get; init; }
+    // Internally we keep EndIndex for compatibility, but all public APIs treat the
+    // second parameter as a COUNT. EndIndex is derived from StartIndex + Count - 1.
     public int EndIndex { get; init; }
     public int ViewportHeight { get; init; }
     public int ItemHeight { get; init; }
@@ -348,12 +350,19 @@ public static class VirtualizationExtensions
     private static readonly Dictionary<object, VirtualizationViewport> _viewports = new();
     private static readonly Dictionary<object, double> _rowHeights = new();
 
-    public static void SetViewport<TData>(this Table<TData> table, int startIndex, int endIndex, int viewportHeight = 400, int itemHeight = 25)
+    // The second parameter is a COUNT (how many rows), not an end index.
+    public static void SetViewport<TData>(this Table<TData> table, int startIndex, int count, int viewportHeight = 400, int itemHeight = 25)
     {
+        var safeStart = Math.Max(0, startIndex);
+        var safeCount = Math.Max(0, count);
+        var endIndex = safeCount <= 0
+            ? Math.Min(table.RowModel.Rows.Count - 1, safeStart)
+            : Math.Min(table.RowModel.Rows.Count - 1, safeStart + safeCount - 1);
+
         var viewport = new VirtualizationViewport
         {
-            StartIndex = Math.Max(0, startIndex),
-            EndIndex = Math.Min(table.RowModel.Rows.Count - 1, endIndex),
+            StartIndex = safeStart,
+            EndIndex = endIndex,
             ViewportHeight = viewportHeight,
             ItemHeight = itemHeight
         };
@@ -383,10 +392,10 @@ public static class VirtualizationExtensions
         return viewportRows.AsReadOnly();
     }
 
-    // Overload for tests that expect 2 parameters
-    public static IReadOnlyList<Row<TData>> GetVirtualRows<TData>(this Table<TData> table, int startIndex, int endIndex)
+    // Overload for tests that expect 2 parameters (startIndex, count)
+    public static IReadOnlyList<Row<TData>> GetVirtualRows<TData>(this Table<TData> table, int startIndex, int count)
     {
-        table.SetViewport(startIndex, endIndex);
+        table.SetViewport(startIndex, count);
         return table.GetViewportRows();
     }
 

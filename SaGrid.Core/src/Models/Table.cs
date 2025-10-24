@@ -133,10 +133,10 @@ public class Table<TData> : ITable<TData>
         var sortedRowModel = Options.GetSortedRowModel?.Invoke(this) ?? GetSortedRowModel(filteredRowModel);
         PreSortedRowModel = sortedRowModel;
 
-        var groupedRowModel = Options.GetGroupedRowModel?.Invoke(this) ?? sortedRowModel;
+        var groupedRowModel = Options.GetGroupedRowModel?.Invoke(this) ?? GetGroupedRowModel(sortedRowModel);
         PreGroupedRowModel = groupedRowModel;
 
-        var expandedRowModel = Options.GetExpandedRowModel?.Invoke(this) ?? groupedRowModel;
+        var expandedRowModel = Options.GetExpandedRowModel?.Invoke(this) ?? GetExpandedRowModel(groupedRowModel);
         PreExpandedRowModel = expandedRowModel;
 
         AssignDisplayIndices(expandedRowModel);
@@ -870,13 +870,12 @@ public class Table<TData> : ITable<TData>
             return true;
         }).ToList();
 
-        Console.WriteLine($"DEBUG Filter result: {filteredRows.Count} / {sourceRowModel.Rows.Count} rows");
-
+        // Preserve the full set of rows for selection/state queries even when filtered
         return new RowModel<TData>
         {
             Rows = filteredRows.AsReadOnly(),
-            FlatRows = filteredRows.AsReadOnly(),
-            RowsById = filteredRows.ToDictionary(r => r.Id, r => r).AsReadOnly()
+            FlatRows = sourceRowModel.FlatRows,
+            RowsById = sourceRowModel.RowsById
         };
     }
 
@@ -911,6 +910,43 @@ public class Table<TData> : ITable<TData>
         // Handle null values
         if (filterValue == null) return true;
         if (cellValue == null) return false;
+
+        // Numeric range object: expects anonymous object with properties 'min' and/or 'max'
+        var filterType = filterValue.GetType();
+        if (!(filterValue is string) && !(filterValue is bool))
+        {
+            var minProp = filterType.GetProperty("min") ?? filterType.GetProperty("Min");
+            var maxProp = filterType.GetProperty("max") ?? filterType.GetProperty("Max");
+            if (minProp != null || maxProp != null)
+            {
+                double? min = null, max = null;
+                try
+                {
+                    if (minProp != null)
+                    {
+                        var mv = minProp.GetValue(filterValue);
+                        if (mv != null && double.TryParse(mv.ToString(), out var d)) min = d;
+                    }
+                    if (maxProp != null)
+                    {
+                        var xv = maxProp.GetValue(filterValue);
+                        if (xv != null && double.TryParse(xv.ToString(), out var d)) max = d;
+                    }
+                }
+                catch { }
+
+                if (min.HasValue || max.HasValue)
+                {
+                    if (double.TryParse(cellValue.ToString(), out var v))
+                    {
+                        if (min.HasValue && v < min.Value) return false;
+                        if (max.HasValue && v > max.Value) return false;
+                        return true;
+                    }
+                    return false;
+                }
+            }
+        }
 
         // Handle different filter types based on value types
         if (filterValue is string stringFilter)
@@ -1014,8 +1050,108 @@ public class Table<TData> : ITable<TData>
         return new RowModel<TData>
         {
             Rows = sortedRows.AsReadOnly(),
+            // Preserve flat index for selection queries across sorting where necessary
             FlatRows = sortedRows.AsReadOnly(),
             RowsById = sortedRows.ToDictionary(r => r.Id, r => r).AsReadOnly()
+        };
+    }
+
+    private RowModel<TData> GetGroupedRowModel(RowModel<TData> sourceRowModel)
+    {
+        var grouping = State.Grouping;
+        if (grouping == null || grouping.Groups.Count == 0)
+        {
+            return sourceRowModel;
+        }
+
+        var groups = grouping.Groups.ToList();
+
+        var flatRows = new List<Row<TData>>();
+        var rowsById = new Dictionary<string, Row<TData>>();
+
+        int nextSyntheticIndex = sourceRowModel.Rows.Count; // start after data rows
+
+        List<Row<TData>> BuildLevel(IEnumerable<Row<TData>> inputRows, int depth, Row<TData>? parent, int level)
+        {
+            var columnId = groups[level];
+            var lookup = inputRows.GroupBy(r => r.GetCell(columnId).Value);
+            var result = new List<Row<TData>>();
+
+            foreach (var grp in lookup)
+            {
+                var preset = new Dictionary<string, object?> { { columnId, grp.Key } };
+                var groupId = $"g_{level}_{columnId}_{grp.Key}_{result.Count}";
+                var groupRow = new Row<TData>(this, groupId, nextSyntheticIndex++, default!, depth, parent, preset, isGroupRow: true);
+                groupRow.SetGroupInfo(columnId, grp.Key);
+
+                rowsById[groupId] = groupRow;
+                flatRows.Add(groupRow);
+                result.Add(groupRow);
+
+                if (level + 1 < groups.Count)
+                {
+                    var child = BuildLevel(grp, depth + 1, groupRow, level + 1);
+                    // child rows are attached to parent via Row constructor
+                }
+                else
+                {
+                    foreach (var row in grp)
+                    {
+                        // attach leaf row under the group
+                        var attach = new Row<TData>(this, row.Id, row.Index, row.Original, depth + 1, groupRow);
+                        rowsById[row.Id] = attach;
+                        flatRows.Add(attach);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        var top = BuildLevel(sourceRowModel.Rows, 0, null, 0);
+        return new RowModel<TData>
+        {
+            Rows = top.AsReadOnly(),
+            FlatRows = flatRows.AsReadOnly(),
+            RowsById = rowsById.AsReadOnly()
+        };
+    }
+
+    private RowModel<TData> GetExpandedRowModel(RowModel<TData> grouped)
+    {
+        // If there is no grouping or expanded state, return grouped as-is
+        var grouping = State.Grouping;
+        if (grouping == null || grouping.Groups.Count == 0)
+        {
+            return grouped;
+        }
+
+        var expanded = State.Expanded ?? new ExpandedState();
+        var visible = new List<Row<TData>>();
+
+        void Walk(Row<TData> row)
+        {
+            visible.Add(row);
+            // Only traverse children when expanded
+            if (row.SubRows.Count > 0 && expanded.Items.GetValueOrDefault(row.Id, false))
+            {
+                foreach (var child in row.SubRows.OfType<Row<TData>>())
+                {
+                    Walk(child);
+                }
+            }
+        }
+
+        foreach (var top in grouped.Rows)
+        {
+            Walk(top);
+        }
+
+        return new RowModel<TData>
+        {
+            Rows = visible.AsReadOnly(),
+            FlatRows = grouped.FlatRows,
+            RowsById = grouped.RowsById
         };
     }
 }

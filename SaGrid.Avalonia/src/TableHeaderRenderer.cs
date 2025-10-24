@@ -69,10 +69,7 @@ public class TableHeaderRenderer<TData>
             container.Children.Add(rowPanel);
         }
 
-        if (table.Options.EnableColumnFilters)
-        {
-            container.Children.Add(CreateFilterRow(table, layoutManager));
-        }
+        // Display-only: do not render interactive filter row in base Avalonia layer.
 
         return container;
     }
@@ -205,13 +202,14 @@ public class TableHeaderRenderer<TData>
 
     private Control CreateResizeRail(Table<TData> table, Column<TData> column)
     {
+        // Display-only: draw a static divider line; no resize interactions here.
         var rail = new Grid
         {
-            Width = column.CanResize && !column.Columns.Any() ? ResizeHandleWidth : 1,
+            Width = 1,
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Stretch,
             Background = Brushes.Transparent,
-            IsHitTestVisible = column.CanResize && !column.Columns.Any()
+            IsHitTestVisible = false
         };
 
         rail.SetValue(Panel.ZIndexProperty, 1);
@@ -219,45 +217,11 @@ public class TableHeaderRenderer<TData>
         var line = new Border
         {
             Width = 1,
-            Background = new SolidColorBrush(Colors.Gray),
+            Background = new SolidColorBrush(Colors.LightGray),
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Stretch
         };
         rail.Children.Add(line);
-
-        if (!(column.CanResize && !column.Columns.Any()))
-        {
-            return rail;
-        }
-
-        var thumb = new Thumb
-        {
-            Cursor = new Cursor(StandardCursorType.SizeWestEast),
-            Background = Brushes.Transparent,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch
-        };
-
-        thumb.SetValue(Panel.ZIndexProperty, 1);
-        rail.Children.Add(thumb);
-
-        void ResetLine() => line.Background = Brushes.LightGray;
-
-        thumb.PointerEntered += (_, _) => line.Background = new SolidColorBrush(Colors.DodgerBlue);
-        thumb.PointerExited += (_, _) => ResetLine();
-        thumb.PointerCaptureLost += (_, _) => EndResize(thumb, resetLine: true);
-
-        thumb.DragStarted += (_, _) => BeginResize(thumb, column);
-        thumb.DragDelta += (_, e) => OnResizeDelta(thumb, column, e);
-        thumb.DragCompleted += (_, _) => EndResize(thumb, resetLine: true);
-
-        thumb.DoubleTapped += (_, e) =>
-        {
-            column.ResetSize();
-            _currentLayoutManager?.Refresh();
-            ResetLine();
-            e.Handled = true;
-        };
 
         return rail;
     }
@@ -322,83 +286,9 @@ public class TableHeaderRenderer<TData>
         Column<TData> column,
         TextBlock sortIndicator)
     {
-        if (!column.CanSort)
-        {
-            return;
-        }
-
-        target.Cursor = new Cursor(StandardCursorType.Hand);
-
-        var pressed = false;
-
-        target.PointerPressed += (_, e) =>
-        {
-            if (e.GetCurrentPoint(target).Properties.IsLeftButtonPressed)
-            {
-                pressed = true;
-            }
-        };
-
-        target.PointerReleased += (_, e) =>
-        {
-            if (!pressed || e.InitialPressMouseButton != MouseButton.Left)
-            {
-                pressed = false;
-                return;
-            }
-
-            pressed = false;
-
-            ToggleSorting(table, column);
-            UpdateSortIndicator(column, sortIndicator);
-            e.Handled = true;
-        };
-
-        target.PointerCaptureLost += (_, __) => pressed = false;
-        target.PointerExited += (_, __) => pressed = false;
+        // Display-only: no sorting interactions here. Solid/Advanced layers handle it.
+        _ = target; _ = table; _ = column; _ = sortIndicator;
     }
 
-    private Control CreateFilterRow(Table<TData> table, TableColumnLayoutManager<TData> layoutManager)
-    {
-        var rowPanel = layoutManager.CreatePanel();
-        rowPanel.Height = FilterHeight;
-
-        foreach (var column in table.VisibleLeafColumns)
-        {
-            var border = new Border
-            {
-                BorderThickness = new Thickness(0, 0, 1, 1),
-                BorderBrush = Brushes.LightGray,
-                Background = Brushes.White,
-                Padding = new Thickness(4)
-            };
-
-            var textBox = new TextBox
-            {
-                Watermark = $"Filter {column.Id}...",
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                VerticalAlignment = VerticalAlignment.Stretch
-            };
-
-            textBox.Text = column.FilterValue?.ToString() ?? string.Empty;
-            textBox.TextChanged += (_, __) =>
-            {
-                column.SetFilterValue(string.IsNullOrEmpty(textBox.Text) ? null : textBox.Text);
-            };
-
-            textBox.KeyDown += (_, args) =>
-            {
-                if (args.Key == Key.Enter)
-                {
-                    table.SetState(table.State);
-                }
-            };
-
-            border.Child = textBox;
-            ColumnLayoutPanel.SetColumnId(border, column.Id);
-            rowPanel.Children.Add(border);
-        }
-
-        return rowPanel;
-    }
+    // Display-only: no filter row.
 }

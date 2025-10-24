@@ -67,8 +67,8 @@ SaGrid/
 |---------|-------------|---------|
 | **`SaGrid.Core`** | Headless table engine | ✅ Stable |
 | **`SaGrid.Avalonia`** | Avalonia UI building blocks (non-reactive) | ✅ Stable |
-| **`SaGrid.SolidAvalonia`** | SolidAvalonia bindings for SaGrid.Avalonia | ✅ Stable |
-| **`SaGrid.Advanced`** | Advanced features & components | 🔄 In Progress |
+| **`SaGrid.SolidAvalonia`** | Reactive wrappers around display primitives | ✅ Stable |
+| **`SaGrid.Advanced`** | Full-featured composition (sorting, resizing, filters, grouping, virtualization, DnD) | 🔄 In Progress |
 | **`Examples`** | Sample applications | 📚 Documentation |
 | **`Tests`** | Comprehensive test suite | 🧪 Testing |
 
@@ -164,14 +164,38 @@ var table = new Table<Employee>(new TableOptions<Employee>
     EnablePagination = true
 });
 
-var header = new TableHeaderRenderer<Employee>().CreateHeader(table);
-var body = new TableBodyRenderer<Employee>().CreateBody(table);
+var layout = SaGrid.Avalonia.TableColumnLayoutManagerRegistry.GetOrCreate(table);
+var header = new TableHeaderRenderer<Employee>().CreateHeader(table, layout);
+var body = new TableBodyRenderer<Employee>().CreateBody(table, layout);
 var footer = new TableFooterRenderer<Employee>().CreateFooter(table);
 
 var layout = new StackPanel().Children(header, body, footer);
 ```
 
 > 💡 **Tip:** use the reactive Solid build when you want automatic updates; stick to the Avalonia building blocks when you prefer full control over redraw timing (e.g., MVVM).
+
+## 🧱 Layering & Responsibilities
+
+- SaGrid.Core (headless)
+  - Table engine only: columns, rows, sorting, filtering, grouping, expansion, pagination, selection, sizing state.
+  - No UI dependencies. All state changes are pure and observable.
+
+- SaGrid.Avalonia (display-only)
+  - Renders header/body/footer using a `TableColumnLayoutSnapshot` provided by a `TableColumnLayoutManager`.
+  - No interactions (no sorting clicks, resize thumbs, or filter editors). Pure visuals for maximum predictability.
+
+- SaGrid.SolidAvalonia (reactive wrappers)
+  - Declarative Solid components that re-render on state changes and host viewport/width reporting.
+  - Pairs Core state with Avalonia display primitives.
+
+- SaGrid.Advanced (full composition)
+  - Wires the complete UX: sorting, filters, grouping chips, column resizing, virtualization, drag & drop, status bar, etc.
+  - Updates Core state and refreshes layout snapshots; header/body stay aligned under resize/scroll.
+
+### Virtualization
+
+- Advanced enables a virtualized body (with pooling) and keeps header and body aligned during fast scroll and column resizing.
+- The Avalonia display layer intentionally omits behavior and can be used for deterministic drawing from the latest snapshot.
 
 ## 🔥 Advanced Techniques
 
