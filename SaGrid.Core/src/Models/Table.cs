@@ -219,6 +219,20 @@ public class Table<TData> : ITable<TData>
         }
     }
 
+    private bool IsDebugFilteringEnabled()
+    {
+        if (Options.Meta != null && Options.Meta.TryGetValue("debugFiltering", out var v))
+        {
+            return v switch
+            {
+                bool b => b,
+                string s => s.Equals("true", StringComparison.OrdinalIgnoreCase),
+                _ => false
+            };
+        }
+        return false;
+    }
+
     private static void AssignDisplayIndices(RowModel<TData> model)
     {
         var flatRows = model.FlatRows;
@@ -238,6 +252,41 @@ public class Table<TData> : ITable<TData>
         PrePaginationRowModel = rowModel;
         RowModel = rowModel;
         UpdateRowMap(rowModel);
+    }
+
+    // Rebuild full pipeline from externally supplied core rows (e.g., server-side data source)
+    public void RebuildFromExternalRows(IReadOnlyList<Row<TData>> coreRows)
+    {
+        // Build a core model from provided rows
+        var coreModel = new RowModel<TData>
+        {
+            Rows = coreRows.ToList().AsReadOnly(),
+            FlatRows = coreRows.ToList().AsReadOnly(),
+            RowsById = coreRows.ToDictionary(r => r.Id, r => r).AsReadOnly()
+        };
+
+        // Apply pipeline stages using existing stage methods
+        var filteredRowModel = Options.GetFilteredRowModel?.Invoke(this) ?? GetFilteredRowModel(coreModel);
+        PreFilteredRowModel = filteredRowModel;
+
+        var sortedRowModel = Options.GetSortedRowModel?.Invoke(this) ?? GetSortedRowModel(filteredRowModel);
+        PreSortedRowModel = sortedRowModel;
+
+        var groupedRowModel = Options.GetGroupedRowModel?.Invoke(this) ?? GetGroupedRowModel(sortedRowModel);
+        PreGroupedRowModel = groupedRowModel;
+
+        var expandedRowModel = Options.GetExpandedRowModel?.Invoke(this) ?? GetExpandedRowModel(groupedRowModel);
+        PreExpandedRowModel = expandedRowModel;
+
+        AssignDisplayIndices(expandedRowModel);
+
+        var paginatedRowModel = Options.GetPaginationRowModel?.Invoke(this) ?? GetPaginatedRowModel(expandedRowModel);
+        PrePaginationRowModel = expandedRowModel;
+
+        RowModel = paginatedRowModel;
+        AssignDisplayIndices(RowModel);
+
+        UpdateRowMap();
     }
 
     private void UpdateVisibleColumns()
@@ -836,224 +885,14 @@ public class Table<TData> : ITable<TData>
 
     private RowModel<TData> GetFilteredRowModel(RowModel<TData> sourceRowModel)
     {
-        var globalFilter = State.GlobalFilter;
-        var columnFilters = State.ColumnFilters;
-
-        // If no filters are active, return the source model
-        if (globalFilter == null && (columnFilters == null || columnFilters.Filters.Count == 0))
-        {
-            return sourceRowModel;
-        }
-
-        Console.WriteLine($"DEBUG Filter: global={(globalFilter?.Value?.ToString() ?? "<none>")}, columnFilters={(columnFilters?.Filters.Count ?? 0)}");
-
-        var filteredRows = sourceRowModel.Rows.Where(row =>
-        {
-            // Apply global filter
-            if (globalFilter != null && !PassesGlobalFilter(row, globalFilter.Value))
-            {
-                return false;
-            }
-
-            // Apply column filters
-            if (columnFilters != null)
-            {
-                foreach (var filter in columnFilters.Filters)
-                {
-                    if (!PassesColumnFilter(row, filter))
-                    {
-                        return false;
-                    }
-                }
-            }
-
-            return true;
-        }).ToList();
-
-        // Preserve the full set of rows for selection/state queries even when filtered
-        return new RowModel<TData>
-        {
-            Rows = filteredRows.AsReadOnly(),
-            FlatRows = sourceRowModel.FlatRows,
-            RowsById = sourceRowModel.RowsById
-        };
-    }
-
-    private bool PassesGlobalFilter(Row<TData> row, object filterValue)
-    {
-        var filterText = filterValue?.ToString()?.ToLowerInvariant();
-        if (string.IsNullOrEmpty(filterText)) return true;
-
-        // Check all visible columns for the filter text
-        foreach (var column in VisibleLeafColumns)
-        {
-            var cell = row.GetCell(column.Id);
-            var cellValue = cell.Value?.ToString()?.ToLowerInvariant();
-            if (!string.IsNullOrEmpty(cellValue) && cellValue.Contains(filterText))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private bool PassesColumnFilter(Row<TData> row, ColumnFilter filter)
-    {
-        var column = GetColumn(filter.Id);
-        if (column == null) return true;
-
-        var cell = row.GetCell(filter.Id);
-        var cellValue = cell.Value;
-        var filterValue = filter.Value;
-
-        // Handle null values
-        if (filterValue == null) return true;
-        if (cellValue == null) return false;
-
-        // Numeric range object: expects anonymous object with properties 'min' and/or 'max'
-        var filterType = filterValue.GetType();
-        if (!(filterValue is string) && !(filterValue is bool))
-        {
-            var minProp = filterType.GetProperty("min") ?? filterType.GetProperty("Min");
-            var maxProp = filterType.GetProperty("max") ?? filterType.GetProperty("Max");
-            if (minProp != null || maxProp != null)
-            {
-                double? min = null, max = null;
-                try
-                {
-                    if (minProp != null)
-                    {
-                        var mv = minProp.GetValue(filterValue);
-                        if (mv != null && double.TryParse(mv.ToString(), out var d)) min = d;
-                    }
-                    if (maxProp != null)
-                    {
-                        var xv = maxProp.GetValue(filterValue);
-                        if (xv != null && double.TryParse(xv.ToString(), out var d)) max = d;
-                    }
-                }
-                catch { }
-
-                if (min.HasValue || max.HasValue)
-                {
-                    if (double.TryParse(cellValue.ToString(), out var v))
-                    {
-                        if (min.HasValue && v < min.Value) return false;
-                        if (max.HasValue && v > max.Value) return false;
-                        return true;
-                    }
-                    return false;
-                }
-            }
-        }
-
-        // Handle different filter types based on value types
-        if (filterValue is string stringFilter)
-        {
-            // If the cell is numeric/bool and the filter parses to that type, do typed comparison
-            if (cellValue is int cellInt && int.TryParse(stringFilter, out var parsedInt))
-            {
-                return cellInt == parsedInt;
-            }
-            if (cellValue is double cellDouble && double.TryParse(stringFilter, out var parsedDouble))
-            {
-                return Math.Abs(cellDouble - parsedDouble) < 0.000_001;
-            }
-            if (cellValue is float cellFloat && float.TryParse(stringFilter, out var parsedFloat))
-            {
-                return Math.Abs(cellFloat - parsedFloat) < 0.000_001f;
-            }
-            if (cellValue is decimal cellDecimal && decimal.TryParse(stringFilter, out var parsedDecimal))
-            {
-                return cellDecimal == parsedDecimal;
-            }
-            if (cellValue is bool cellBool && bool.TryParse(stringFilter, out var parsedBool))
-            {
-                return cellBool == parsedBool;
-            }
-
-            // Fallback to string contains (case-insensitive)
-            var cellString = cellValue.ToString() ?? "";
-            return cellString.IndexOf(stringFilter, StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        if (filterValue is bool boolFilter)
-        {
-            return cellValue is bool cellBool && cellBool == boolFilter;
-        }
-
-        if (filterValue is int intFilter)
-        {
-            return cellValue is int cellInt && cellInt == intFilter;
-        }
-
-        if (filterValue is double doubleFilter)
-        {
-            return cellValue is double cellDouble && Math.Abs(cellDouble - doubleFilter) < 0.001;
-        }
-
-        // Default: convert both to strings and compare
-        return cellValue.ToString()?.Equals(filterValue.ToString(), StringComparison.OrdinalIgnoreCase) == true;
+        // Delegate to shared engine for consistency across client/server
+        return BaseRowModel<TData>.ApplyFilter(this, sourceRowModel.Rows);
     }
 
     private RowModel<TData> GetSortedRowModel(RowModel<TData> sourceRowModel)
     {
-        var sorting = State.Sorting;
-        if (sorting == null || sorting.Columns.Count == 0)
-        {
-            return sourceRowModel;
-        }
-
-        var sortedRows = sourceRowModel.Rows.ToList();
-
-        // Composite comparer: apply sort columns in defined order
-        sortedRows.Sort((row1, row2) =>
-        {
-            foreach (var sortColumn in sorting.Columns)
-            {
-                var column = GetColumn(sortColumn.Id);
-                if (column == null) continue;
-
-                var cell1 = row1.GetCell(sortColumn.Id);
-                var cell2 = row2.GetCell(sortColumn.Id);
-
-                var value1 = cell1.Value;
-                var value2 = cell2.Value;
-
-                if (value1 == null && value2 == null) continue; // equal, continue to next key
-                if (value1 == null) return 1; // nulls last
-                if (value2 == null) return -1;
-
-                int comparison;
-                if (value1 is IComparable comparable1 && value2 is IComparable)
-                {
-                    comparison = comparable1.CompareTo(value2);
-                }
-                else
-                {
-                    comparison = string.Compare(value1.ToString(), value2.ToString(), StringComparison.Ordinal);
-                }
-
-                if (comparison != 0)
-                {
-                    if (sortColumn.Direction == SortDirection.Descending)
-                    {
-                        comparison = -comparison;
-                    }
-                    return comparison;
-                }
-            }
-            return 0;
-        });
-
-        return new RowModel<TData>
-        {
-            Rows = sortedRows.AsReadOnly(),
-            // Preserve flat index for selection queries across sorting where necessary
-            FlatRows = sortedRows.AsReadOnly(),
-            RowsById = sortedRows.ToDictionary(r => r.Id, r => r).AsReadOnly()
-        };
+        // Delegate to shared engine for consistency across client/server
+        return BaseRowModel<TData>.ApplySort(this, sourceRowModel.Rows);
     }
 
     private RowModel<TData> GetGroupedRowModel(RowModel<TData> sourceRowModel)

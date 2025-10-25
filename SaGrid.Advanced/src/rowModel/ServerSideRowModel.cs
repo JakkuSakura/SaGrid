@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using SaGrid.Advanced.Interfaces;
 using SaGrid.Core;
 using SaGrid.Advanced;
+using SaGrid.Core.Models;
 
 namespace SaGrid.Advanced.RowModel;
 
@@ -29,6 +30,7 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
     private const int DefaultMaxResidentBlocks = 24; // safety cap to keep memory bounded
     private int _retainMarginBlocks;
     private int _maxResidentBlocks;
+    private List<Row<TData>> _processedRows = new();
 
     public event EventHandler? RowsChanged;
 
@@ -113,7 +115,11 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
     {
         lock (_sync)
         {
-            return _rowCache.TryGetValue(index, out var row) ? row : null;
+            if (index >= 0 && index < _processedRows.Count)
+            {
+                return _processedRows[index];
+            }
+            return null;
         }
     }
 
@@ -129,16 +135,19 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
     {
         lock (_sync)
         {
+            // Prefer computed visible rows when available
+            if (_processedRows.Count > 0)
+            {
+                return _processedRows.Count;
+            }
             if (_lastRow.HasValue)
             {
                 return _lastRow.Value;
             }
-
             if (_maxLoadedRowIndex >= 0)
             {
                 return Math.Max(_maxLoadedRowIndex + 1 + BlockSize, _maxRequestedRowIndex);
             }
-
             return BlockSize;
         }
     }
@@ -152,7 +161,7 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
     {
         lock (_sync)
         {
-            return _lastRow == 0 || (_rowCache.Count == 0 && !_lastRow.HasValue);
+            return _processedRows.Count == 0 && (_lastRow == 0 || (!_lastRow.HasValue && _rowCache.Count == 0));
         }
     }
 
@@ -160,7 +169,7 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
     {
         lock (_sync)
         {
-            return _rowCache.Count > 0;
+            return _processedRows.Count > 0;
         }
     }
 
@@ -170,9 +179,9 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
 
         lock (_sync)
         {
-            foreach (var kvp in _rowCache.OrderBy(k => k.Key))
+            for (int i = 0; i < _processedRows.Count; i++)
             {
-                callback(kvp.Value, kvp.Key);
+                callback(_processedRows[i], i);
             }
         }
     }
@@ -208,7 +217,7 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
         // No-op for server-side row model
     }
 
-    public IReadOnlyList<Row<TData>> RootRows => _rowCache.OrderBy(k => k.Key).Select(k => k.Value).ToList();
+    public IReadOnlyList<Row<TData>> RootRows => _processedRows.ToList();
 
     private bool IsBlockLoaded(int blockIndex)
     {
@@ -273,9 +282,18 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
             }
 
             _loadedBlocks.Add(blockIndex);
+
+            RecomputeProcessedRows_NoLock();
         }
 
         RowsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void RecomputeProcessedRows_NoLock()
+    {
+        var rows = _rowCache.OrderBy(k => k.Key).Select(k => k.Value).ToList();
+        _processedRows = rows;
+        for (int i = 0; i < _processedRows.Count; i++) _processedRows[i].SetDisplayIndex(i);
     }
 
     private void EvictOutsideWindow(int currentStartBlock, int currentEndBlock)
@@ -383,6 +401,7 @@ public sealed class ServerSideRowModel<TData> : IServerSideRowModel<TData>
             _loadedBlocks.Clear();
             _lastRow = null;
             _maxLoadedRowIndex = -1;
+            _processedRows.Clear();
             // Preserve _maxRequestedRowIndex so approximate row count remains large enough
             // for viewports scrolled deep into the dataset. This lets the UI request
             // the currently visible range immediately after a purge.

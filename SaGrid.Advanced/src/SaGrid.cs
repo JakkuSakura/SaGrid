@@ -190,10 +190,7 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
         }
 
         _sideBarService.EnsureDefaultPanels(this);
-        if (_filterService is FilterService filterServiceImpl)
-        {
-            filterServiceImpl.EnsureFilterPanel(this, _sideBarService);
-        }
+        // Standalone filter panel disabled; rely on built-in filter boxes and global filter hook
         _statusBarService.EnsureDefaultWidgets(this);
         _chartIntegrationService.AttachToGrid(this);
         _exportCoordinator.AttachToGrid(this);
@@ -1164,9 +1161,8 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 
     internal Row<TData>? TryGetDisplayedRow(int index)
     {
-        return _rowModelType == RowModelType.ServerSide
-            ? _serverSideRowModel?.GetRow(index)
-            : _clientSideRowModel.GetRow(index);
+        var rows = _table.RowModel.Rows;
+        return (index >= 0 && index < rows.Count) ? rows[index] : null;
     }
 
     internal Task EnsureDataRangeAsync(int startRow, int endRow, CancellationToken cancellationToken = default)
@@ -1203,6 +1199,16 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 
     private void OnServerRowsChanged(object? sender, EventArgs e)
     {
+        // Build a RowModel from the current server rows and install it into the Table.
+        // This ensures Table.RowModel is the single source for rendering (filter/sort/group/paginate).
+        var server = _serverSideRowModel;
+        if (server != null)
+        {
+            var rows = server.RootRows.ToList();
+            for (int i = 0; i < rows.Count; i++) rows[i].SetDisplayIndex(i);
+            _table.RebuildFromExternalRows(rows);
+        }
+
         RaiseModelUpdated(false);
     }
 

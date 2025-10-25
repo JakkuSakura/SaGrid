@@ -27,7 +27,7 @@ internal sealed class ServerSideAnalyticsExample : IExample
 
     public ExampleHost Create()
     {
-        var people = ExampleData.GenerateLargeDataset(1500); // TODO: investigate virtualization performance for larger data sets
+        var people = ExampleData.GenerateLargeDataset(1500);
         var columns = ExampleData.CreateDefaultColumns();
         var dataSource = new InMemoryPersonServerDataSource(people, columns, blockSize: 150);
 
@@ -47,7 +47,8 @@ internal sealed class ServerSideAnalyticsExample : IExample
             Meta = new Dictionary<string, object>
             {
                 ["rowModelType"] = RowModelType.ServerSide,
-                ["serverSideBlockSize"] = dataSource.BlockSize
+                ["serverSideBlockSize"] = dataSource.BlockSize,
+                ["debugFiltering"] = true
             },
             OnStateChange = state => onStateChange?.Invoke(state),
             State = new TableState<Person>
@@ -76,7 +77,7 @@ internal sealed class ServerSideAnalyticsExample : IExample
 
         refresh = () =>
         {
-            infoText.Text = BuildInfoText(grid, dataSource);
+            infoText.Text = BuildInfoText(grid);
             UpdateControlButtons(grid, controlsContext);
         };
 
@@ -192,10 +193,9 @@ internal sealed class ServerSideAnalyticsExample : IExample
         context.ResetSorting.Content = $"↕️ Reset Sorting ({sortCount})";
     }
 
-    private static string BuildInfoText(SaGrid<Person> grid, InMemoryPersonServerDataSource dataSource)
+    private static string BuildInfoText(SaGrid<Person> grid)
     {
         var approxRows = grid.GetApproximateRowCount();
-        var loadedRows = dataSource.LoadedRowCount;
         var totalColumns = grid.AllLeafColumns.Count;
         var visibleColumns = grid.VisibleLeafColumns.Count;
         var hasGlobalFilter = grid.State.GlobalFilter != null;
@@ -213,7 +213,7 @@ internal sealed class ServerSideAnalyticsExample : IExample
             selectionInfo += $" | Active: ({activeCell.Value.RowIndex},{activeCell.Value.ColumnId})";
         }
 
-        return $"📊 Rows: ~{approxRows} (loaded {loadedRows}) | Columns: {visibleColumns}/{totalColumns} | Multi-Sort: {multiSort}\n" +
+        return $"📊 Rows: ~{approxRows} | Columns: {visibleColumns}/{totalColumns} | Multi-Sort: {multiSort}\n" +
                $"Filters: Global {(hasGlobalFilter ? "✅" : "❌")}, Column {(hasColumnFilters ? "✅" : "❌")} | {selectionInfo}";
     }
 
@@ -259,7 +259,6 @@ internal sealed class ServerSideAnalyticsExample : IExample
     {
         private readonly List<Person> _rows;
         private readonly int _blockSize;
-        private readonly HashSet<int> _loadedIndexes = new();
         private readonly object _sync = new();
         private readonly string[] _depts = { "Engineering", "Marketing", "Sales", "HR", "Finance", "Operations", "Support" };
         private readonly IReadOnlyList<ColumnDef<Person>> _columns;
@@ -273,183 +272,190 @@ internal sealed class ServerSideAnalyticsExample : IExample
 
         public int BlockSize => _blockSize;
 
-        public int LoadedRowCount
-        {
-            get
-            {
-                lock (_sync)
-                {
-                    return _loadedIndexes.Count;
-                }
-            }
-        }
-
-        private void EnsureRows(int count)
-        {
-            lock (_sync)
-            {
-                while (_rows.Count < count)
-                {
-                    var i = _rows.Count + 1;
-                    var dept = _depts[i % _depts.Length];
-                    var first = $"User{i}";
-                    var last = $"Demo{i}";
-                    var age = 20 + (i % 45);
-                    var email = $"{first.ToLowerInvariant()}.{last.ToLowerInvariant()}@example.com";
-                    var isActive = (i % 3) != 0;
-                    _rows.Add(new Person(i, first, last, age, email, dept, isActive));
-                }
-            }
-        }
-
         public async Task<ServerSideRowsResult<Person>> GetRowsAsync(ServerSideRowsRequest request, CancellationToken cancellationToken = default)
         {
             await Task.Delay(120, cancellationToken);
 
-            // Grow backing data to cover the requested window for infinite scrolling
             var start = Math.Max(0, request.StartRow);
             var end = Math.Max(start, request.EndRow);
-            EnsureRows(end);
 
-            // Build query context (table state + server-only SetFilterState support)
-            var context = BuildContextFromRequest(request);
-            var options = new TableOptions<Person>
-            {
-                Data = _rows,
-                Columns = _columns,
-                EnableSorting = true,
-                EnableGlobalFilter = true,
-                EnableColumnFilters = true,
-                State = context.State
-            };
+            IEnumerable<Person> query = _rows;
 
-            var table = new Table<Person>(options);
-            // Start with Core pipeline result
-            IEnumerable<Row<Person>> working = table.RowModel.FlatRows;
-
-            // Apply SetFilterState manually (Core pipeline doesn't handle SetFilterState)
-            if (context.SetFilters.Count > 0)
-            {
-                working = working.Where(row => MatchesSetFilters(row, context.SetFilters));
-            }
-
-            var filtered = working.Select(r => r.Original).ToList();
-            start = Math.Clamp(start, 0, filtered.Count);
-            end = Math.Clamp(end, start, filtered.Count);
-            var rows = filtered.Skip(start).Take(Math.Max(0, end - start)).ToList();
-
-            lock (_sync)
-            {
-                for (var i = 0; i < rows.Count; i++)
-                {
-                    _loadedIndexes.Add(start + i);
-                }
-            }
-
-            // Infinite scrolling: never set lastRow to force unbounded scroll in both directions
-            return new ServerSideRowsResult<Person>(rows, null);
-        }
-
-        private static QueryContext BuildContextFromRequest(ServerSideRowsRequest request)
-        {
-            var filters = new List<ColumnFilter>();
-            object? global = null;
-            var setFilters = new Dictionary<string, SetFilterState>(StringComparer.OrdinalIgnoreCase);
+            // Apply column filters
             foreach (var kv in request.FilterModel)
             {
-                if (string.Equals(kv.Key, "__global", StringComparison.OrdinalIgnoreCase))
+                var key = kv.Key;
+                var value = kv.Value;
+                if (string.Equals(key, "__global", StringComparison.OrdinalIgnoreCase))
                 {
-                    global = kv.Value;
+                    continue; // handle global later
+                }
+
+                if (value == null)
+                {
+                    continue;
+                }
+
+                if (value is IReadOnlyDictionary<string, object?> dict)
+                {
+                    // Numeric range
+                    dict.TryGetValue("min", out var minObj);
+                    dict.TryGetValue("max", out var maxObj);
+                    query = ApplyRangeFilter(query, key, minObj, maxObj);
                 }
                 else
                 {
-                    // Convert {min,max} dictionaries into an object with properties so Core can read via reflection
-                    if (kv.Value is IReadOnlyDictionary<string, object?> dict)
+                    query = ApplyColumnFilter(query, key, value);
+                }
+            }
+
+            // Apply global filter (string contains across visible columns)
+            if (request.FilterModel.TryGetValue("__global", out var globalValue))
+            {
+                var text = globalValue?.ToString()?.Trim();
+                if (!string.IsNullOrEmpty(text))
+                {
+                    query = query.Where(p => MatchesAnyVisible(p, text!, request.ColumnVisibilityMap));
+                }
+            }
+
+            // Apply sorting (multi-sort)
+            if (request.SortModel != null && request.SortModel.Count > 0)
+            {
+                IOrderedEnumerable<Person>? ordered = null;
+                foreach (var sort in request.SortModel)
+                {
+                    Func<Person, object?> keySelector = sort.Id switch
                     {
-                        dict.TryGetValue("min", out var minObj);
-                        dict.TryGetValue("max", out var maxObj);
-                        filters.Add(new ColumnFilter(kv.Key, new RangeFilterProxy(minObj, maxObj)));
-                    }
-                    // Defer SetFilterState to the server-side manual filter stage
-                    else if (kv.Value is SetFilterState setState)
+                        "id" => p => p.Id,
+                        "firstName" => p => p.FirstName,
+                        "lastName" => p => p.LastName,
+                        "age" => p => p.Age,
+                        "email" => p => p.Email,
+                        "department" => p => p.Department,
+                        "isActive" => p => p.IsActive,
+                        _ => p => null
+                    };
+
+                    if (ordered == null)
                     {
-                        setFilters[kv.Key] = setState;
+                        ordered = sort.Direction == SortDirection.Descending
+                            ? query.OrderByDescending(keySelector)
+                            : query.OrderBy(keySelector);
                     }
                     else
                     {
-                        filters.Add(new ColumnFilter(kv.Key, kv.Value));
+                        ordered = sort.Direction == SortDirection.Descending
+                            ? ordered.ThenByDescending(keySelector)
+                            : ordered.ThenBy(keySelector);
                     }
+                }
+
+                if (ordered != null)
+                {
+                    query = ordered;
                 }
             }
 
-            var sorting = new SortingState(request.SortModel?.ToList() ?? new List<ColumnSort>());
-            var columnFilters = filters.Count > 0 ? new ColumnFiltersState(filters) : null;
-            var globalFilter = global != null ? new GlobalFilterState(global) : null;
-            ColumnVisibilityState? visibility = null;
-            if (request.ColumnVisibilityMap != null && request.ColumnVisibilityMap.Count > 0)
-            {
-                visibility = new ColumnVisibilityState(new Dictionary<string, bool>(request.ColumnVisibilityMap));
-            }
+            var materialized = query.ToList();
+            var rowCount = materialized.Count;
+            start = Math.Clamp(start, 0, rowCount);
+            end = Math.Clamp(end, start, rowCount);
+            var rows = materialized.Skip(start).Take(Math.Max(0, end - start)).ToList();
 
-            var state = new TableState<Person>
-            {
-                Sorting = sorting,
-                ColumnFilters = columnFilters,
-                GlobalFilter = globalFilter,
-                ColumnVisibility = visibility
-            };
-
-            return new QueryContext(state, setFilters);
+            return new ServerSideRowsResult<Person>(rows, rowCount);
         }
 
-        // Simple proxy so Core's PassesColumnFilter can read min/max via property reflection
-        private sealed record RangeFilterProxy(object? min, object? max);
+        private static IEnumerable<Person> ApplyRangeFilter(IEnumerable<Person> source, string columnId, object? minObj, object? maxObj)
+        {
+            double? min = TryToDouble(minObj);
+            double? max = TryToDouble(maxObj);
+            if (min == null && max == null) return source;
 
-        private sealed record QueryContext(
-            TableState<Person> State,
-            IReadOnlyDictionary<string, SetFilterState> SetFilters);
+            return source.Where(p =>
+            {
+                double value = columnId switch
+                {
+                    "age" => p.Age,
+                    "id" => p.Id,
+                    _ => double.NaN
+                };
+
+                if (double.IsNaN(value)) return false;
+                if (min.HasValue && value < min.Value) return false;
+                if (max.HasValue && value > max.Value) return false;
+                return true;
+            });
+        }
+
+        private static IEnumerable<Person> ApplyColumnFilter(IEnumerable<Person> source, string columnId, object filterValue)
+        {
+            return source.Where(p =>
+            {
+                object? cell = columnId switch
+                {
+                    "id" => p.Id,
+                    "firstName" => p.FirstName,
+                    "lastName" => p.LastName,
+                    "age" => p.Age,
+                    "email" => p.Email,
+                    "department" => p.Department,
+                    "isActive" => p.IsActive,
+                    _ => null
+                };
+
+                if (cell == null) return false;
+
+                // Handle string filters with typed-equality + substring fallback
+                if (filterValue is string s)
+                {
+                    var text = s.Trim();
+                    if (text.Length == 0) return true;
+
+                    if (cell is int ci && int.TryParse(text, out var pi)) return ci == pi;
+                    if (cell is double cd && double.TryParse(text, out var pd)) return Math.Abs(cd - pd) < 0.000001;
+                    if (cell is float cf && float.TryParse(text, out var pf)) return Math.Abs(cf - pf) < 0.000001f;
+                    if (cell is decimal cz && decimal.TryParse(text, out var pz)) return cz == pz;
+                    if (cell is bool cb && bool.TryParse(text, out var pb)) return cb == pb;
+
+                    return cell.ToString()!.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0;
+                }
+
+                // Typed filters
+                if (filterValue is bool fb && cell is bool cb2) return fb == cb2;
+                if (filterValue is int fi && cell is int ci2) return fi == ci2;
+                if (filterValue is double fd && cell is double cd2) return Math.Abs(fd - cd2) < 0.000001;
+
+                return string.Equals(cell.ToString(), filterValue.ToString(), StringComparison.OrdinalIgnoreCase);
+            });
+        }
+
+        private static bool MatchesAnyVisible(Person p, string text, IReadOnlyDictionary<string, bool>? visibility)
+        {
+            bool IsVisible(string id) => visibility == null || !visibility.TryGetValue(id, out var v) || v;
+
+            if (IsVisible("id") && p.Id.ToString().Contains(text, StringComparison.OrdinalIgnoreCase)) return true;
+            if (IsVisible("firstName") && p.FirstName.Contains(text, StringComparison.OrdinalIgnoreCase)) return true;
+            if (IsVisible("lastName") && p.LastName.Contains(text, StringComparison.OrdinalIgnoreCase)) return true;
+            if (IsVisible("age") && p.Age.ToString().Contains(text, StringComparison.OrdinalIgnoreCase)) return true;
+            if (IsVisible("email") && p.Email.Contains(text, StringComparison.OrdinalIgnoreCase)) return true;
+            if (IsVisible("department") && p.Department.Contains(text, StringComparison.OrdinalIgnoreCase)) return true;
+            if (IsVisible("isActive") && p.IsActive.ToString().Contains(text, StringComparison.OrdinalIgnoreCase)) return true;
+
+            return false;
+        }
+
+        private static double? TryToDouble(object? o)
+        {
+            if (o == null) return null;
+            var s = o.ToString();
+            if (double.TryParse(s, out var d)) return d;
+            return null;
+        }
 
         // No quick filter evaluation – rely on Core global filter
 
-        private static bool MatchesSetFilters(Row<Person> row, IReadOnlyDictionary<string, SetFilterState> setFilters)
-        {
-            foreach (var kv in setFilters)
-            {
-                var cellString = row.GetCell(kv.Key).Value?.ToString() ?? string.Empty;
-                if (!EvaluateSetFilter(cellString, kv.Value))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        // Mirrors ClientSideRowModel's set filter evaluation
-        private static bool EvaluateSetFilter(string cellString, SetFilterState state)
-        {
-            var isBlank = string.IsNullOrEmpty(cellString);
-            if (isBlank)
-            {
-                return state.IncludeBlanks;
-            }
-
-            var tokens = cellString
-                .Split(new[] { ',' }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-
-            var selections = state.SelectedValues;
-            if (selections.Count == 0)
-            {
-                return true;
-            }
-
-            if (state.Operator == SetFilterOperator.All)
-            {
-                return selections.All(selection => tokens.Contains(selection, StringComparer.OrdinalIgnoreCase));
-            }
-
-            return tokens.Any(token => selections.Contains(token, StringComparer.OrdinalIgnoreCase));
-        }
+        // No manual set-filter evaluation; Core handles it
     }
 
     private sealed record ControlsPanelContext(

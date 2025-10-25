@@ -250,14 +250,8 @@ public class ClientSideRowModel<TData> : IClientSideRowModel<TData>
 
     private void ExecuteFilterStage()
     {
-        var sourceRows = _table.PreFilteredRowModel.Rows;
-        var columnFilters = _table.State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
-        var globalFilter = _table.State.GlobalFilter?.Value;
-
-        _filteredRows = sourceRows
-            .Where(row => MatchesColumnFilters(row, columnFilters)
-                          && MatchesGlobalFilter(row, globalFilter))
-            .ToList();
+        // Core pipeline already applied filtering (global + column filters)
+        _filteredRows = _table.PreFilteredRowModel.Rows.ToList();
     }
 
     private void ExecuteSortStage()

@@ -299,6 +299,8 @@ public class SaGridComponent<TData> : SolidTable<TData>
                 tableSignal.Setter(Table);
                 selectionSetter(++_selectionCounter);
                 HandleHeaderStateChanges();
+                // Ensure body re-queries data on any state-driven update (filters, sorting, etc.)
+                _virtualizedRowsControl?.RefreshLayout();
             },
             delta =>
             {

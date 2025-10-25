@@ -150,9 +150,13 @@ public static class GlobalFilterExtensions
 {
     public static void SetGlobalFilter<TData>(this Table<TData> table, object? value)
     {
-        table.SetState(state => state with 
-        { 
-            GlobalFilter = value != null ? new GlobalFilterState(value) : null
+        object? normalized = value is string s && string.IsNullOrWhiteSpace(s)
+            ? null
+            : value;
+
+        table.SetState(state => state with
+        {
+            GlobalFilter = normalized != null ? new GlobalFilterState(normalized) : null
         });
     }
 
