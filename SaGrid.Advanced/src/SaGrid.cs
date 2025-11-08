@@ -767,6 +767,13 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
             return string.Equals(currentString, newString, StringComparison.OrdinalIgnoreCase);
         }
 
+        if (currentValue is TextFilterState currentText && newValue is TextFilterState newText)
+        {
+            return string.Equals(currentText.Query, newText.Query, StringComparison.Ordinal) &&
+                   currentText.Mode == newText.Mode &&
+                   currentText.CaseSensitive == newText.CaseSensitive;
+        }
+
         return Equals(currentValue, newValue);
     }
 

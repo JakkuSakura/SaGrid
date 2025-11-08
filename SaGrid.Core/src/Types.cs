@@ -91,6 +91,18 @@ public enum SetFilterOperator
 
 public record SetFilterState(IReadOnlyList<string> SelectedValues, SetFilterOperator Operator = SetFilterOperator.Any, bool IncludeBlanks = false);
 
+// Text filter options for per-column filtering
+// - Mode: contains/starts with/ends with
+// - CaseSensitive: true means use Ordinal comparisons; false uses OrdinalIgnoreCase
+public enum TextFilterMode
+{
+    Contains,
+    StartsWith,
+    EndsWith
+}
+
+public record TextFilterState(string Query, TextFilterMode Mode = TextFilterMode.Contains, bool CaseSensitive = false);
+
 public record GroupingState(List<string> Groups = null!)
 {
     public List<string> Groups { get; init; } = Groups ?? new();

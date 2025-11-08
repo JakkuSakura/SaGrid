@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using SaGrid.Core.Models;
+using SaGrid.Core;
 
 namespace SaGrid.Core.Models;
 
@@ -172,6 +173,27 @@ public class BaseRowModel<TData>
             {
                 Console.WriteLine($"[Filter]  -> Column '{filter.Id}' (SetFilter) cell='{cellString}' selected=[{string.Join(",", setState.SelectedValues)}] op={setState.Operator} blanks={setState.IncludeBlanks} => {(ok ? "PASS" : "FAIL")}");
             }
+            return ok;
+        }
+
+        // Advanced text filter: supports mode and case sensitivity
+        if (filterValue is TextFilterState textState)
+        {
+            var text = textState.Query?.Trim() ?? string.Empty;
+            if (text.Length == 0) return true;
+
+            var cellString = cellValue.ToString() ?? string.Empty;
+            var comparison = textState.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+            bool ok = textState.Mode switch
+            {
+                TextFilterMode.StartsWith => cellString.StartsWith(text, comparison),
+                TextFilterMode.EndsWith => cellString.EndsWith(text, comparison),
+                _ => cellString.IndexOf(text, comparison) >= 0
+            };
+
+            if (debug) Console.WriteLine($"[Filter]     (Text {textState.Mode}, Case={(textState.CaseSensitive ? "Sensitive" : "Insensitive")}) cell='{cellString}' filter='{text}' => {ok}");
+            if (debug) Console.WriteLine($"[Filter]  -> Column '{filter.Id}' {(ok ? "PASS" : "FAIL")} (TextFilterState)");
             return ok;
         }
 

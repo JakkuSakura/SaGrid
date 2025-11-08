@@ -728,6 +728,17 @@ internal class SaGridHeaderRenderer<TData>
         Table<TData> table,
         Column<TData> column)
     {
+        // Build a compact layout: [gear button][text box]
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions
+            {
+                new ColumnDefinition(GridLength.Auto),
+                new ColumnDefinition(GridLength.Star)
+            },
+            Margin = new Thickness(4)
+        };
+
         var textBox = new TextBox
         {
             Width = double.NaN,
@@ -738,13 +749,127 @@ internal class SaGridHeaderRenderer<TData>
             IsEnabled = column.CanFilter,
             AcceptsReturn = false,
             AcceptsTab = false,
-            Margin = new Thickness(4),
             BorderThickness = new Thickness(1),
             BorderBrush = Brushes.Gray,
             Background = Brushes.White,
             MinWidth = 0,
             TabIndex = 0,
             IsTabStop = true
+        };
+        Grid.SetColumn(textBox, 1);
+
+        // Filter options state (advanced mode always active)
+        var currentMode = TextFilterMode.Contains;
+        var currentCaseSensitive = false; // default OFF per requirement
+
+        // Gear button with popup
+        var gearButton = new Button
+        {
+            Width = 22,
+            Height = 22,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0, 0, 4, 0),
+            Content = new TextBlock { Text = "⚙", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
+        };
+        ToolTip.SetTip(gearButton, "Filter options");
+        Grid.SetColumn(gearButton, 0);
+
+        var popup = new Popup
+        {
+            PlacementTarget = gearButton,
+            Placement = PlacementMode.Bottom,
+            IsOpen = false
+        };
+
+        // Map between UI values and enum
+        var modeItems = new[] { "Contains", "Starts with", "Ends with" };
+        var modeCombo = new ComboBox
+        {
+            ItemsSource = modeItems,
+            SelectedIndex = 0,
+            MinWidth = 140,
+            Margin = new Thickness(0, 0, 0, 6)
+        };
+
+        var caseCheck = new CheckBox
+        {
+            Content = "Case sensitive",
+            IsChecked = currentCaseSensitive
+        };
+
+        var popupContent = new Border
+        {
+            Background = Brushes.White,
+            BorderBrush = Brushes.Gray,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(8),
+            Child = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                Children =
+                {
+                    new TextBlock { Text = "Match", FontWeight = FontWeight.Bold, Margin = new Thickness(0,0,0,2) },
+                    modeCombo,
+                    caseCheck
+                }
+            }
+        };
+        popup.Child = popupContent;
+
+        gearButton.Click += (_, _) =>
+        {
+            // Initialize UI from current filter if present
+            var currentValue = table.State.ColumnFilters?.Filters
+                .FirstOrDefault(f => f.Id == column.Id)?.Value;
+            if (currentValue is TextFilterState tfs)
+            {
+                currentMode = tfs.Mode;
+                currentCaseSensitive = tfs.CaseSensitive;
+                modeCombo.SelectedIndex = currentMode switch
+                {
+                    TextFilterMode.StartsWith => 1,
+                    TextFilterMode.EndsWith => 2,
+                    _ => 0
+                };
+                caseCheck.IsChecked = currentCaseSensitive;
+            }
+
+            popup.IsOpen = !popup.IsOpen;
+        };
+
+        void ApplyAdvancedFilter()
+        {
+            var txt = textBox.Text ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(txt))
+            {
+                host.SetColumnFilter(column.Id, null);
+            }
+            else
+            {
+                host.SetColumnFilter(column.Id, new TextFilterState(txt, currentMode, currentCaseSensitive));
+            }
+        }
+
+        modeCombo.SelectionChanged += (_, _) =>
+        {
+            currentMode = modeCombo.SelectedIndex switch
+            {
+                1 => TextFilterMode.StartsWith,
+                2 => TextFilterMode.EndsWith,
+                _ => TextFilterMode.Contains
+            };
+            ApplyAdvancedFilter();
+        };
+
+        caseCheck.Checked += (_, _) =>
+        {
+            currentCaseSensitive = true;
+            ApplyAdvancedFilter();
+        };
+        caseCheck.Unchecked += (_, _) =>
+        {
+            currentCaseSensitive = false;
+            ApplyAdvancedFilter();
         };
 
         textBox.PointerPressed += (_, _) =>
@@ -757,31 +882,33 @@ internal class SaGridHeaderRenderer<TData>
 
         textBox.TextChanged += (_, _) =>
         {
-            var newValue = string.IsNullOrWhiteSpace(textBox.Text) ? null : textBox.Text;
-            var currentValue = table.State.ColumnFilters?.Filters
-                .FirstOrDefault(f => f.Id == column.Id)?.Value;
-
-            var equals = (currentValue == null && newValue == null) ||
-                         (currentValue != null && newValue != null &&
-                          string.Equals(currentValue.ToString(), newValue.ToString(), StringComparison.Ordinal));
-
-            if (!equals)
-            {
-                host.SetColumnFilter(column.Id, newValue);
-            }
+            // Always apply advanced filter behavior
+            ApplyAdvancedFilter();
         };
 
+        grid.Children.Add(gearButton);
+        grid.Children.Add(textBox);
+
+        // Host popup within the same visual tree
+        var container = new Grid();
+        container.Children.Add(grid);
+        container.Children.Add(popup);
+
         return new ColumnFilterRegistration(
-            textBox,
+            container,
             value =>
             {
-                var expected = value?.ToString() ?? string.Empty;
-                if (!string.Equals(textBox.Text, expected, StringComparison.Ordinal))
+                string expectedText = value switch
                 {
-                    textBox.Text = expected;
+                    TextFilterState tfs => tfs.Query ?? string.Empty,
+                    _ => value?.ToString() ?? string.Empty
+                };
+                if (!string.Equals(textBox.Text, expectedText, StringComparison.Ordinal))
+                {
+                    textBox.Text = expectedText;
                 }
             },
-            () => textBox.IsKeyboardFocusWithin);
+            () => textBox.IsKeyboardFocusWithin || gearButton.IsPointerOver || (popup?.IsOpen ?? false));
     }
 
     private ColumnFilterRegistration CreateBooleanFilter(
