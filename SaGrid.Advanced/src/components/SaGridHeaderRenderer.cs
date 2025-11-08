@@ -774,11 +774,10 @@ internal class SaGridHeaderRenderer<TData>
         ToolTip.SetTip(gearButton, "Filter options");
         Grid.SetColumn(gearButton, 0);
 
-        var popup = new Popup
+        // Use a Flyout to avoid impacting layout/measure of the header row
+        var flyout = new Flyout
         {
-            PlacementTarget = gearButton,
-            Placement = PlacementMode.Bottom,
-            IsOpen = false
+            Placement = PlacementMode.Bottom
         };
 
         // Map between UI values and enum
@@ -814,8 +813,9 @@ internal class SaGridHeaderRenderer<TData>
                 }
             }
         };
-        popup.Child = popupContent;
+        flyout.Content = popupContent;
 
+        FlyoutBase.SetAttachedFlyout(gearButton, flyout);
         gearButton.Click += (_, _) =>
         {
             // Initialize UI from current filter if present
@@ -833,8 +833,7 @@ internal class SaGridHeaderRenderer<TData>
                 };
                 caseCheck.IsChecked = currentCaseSensitive;
             }
-
-            popup.IsOpen = !popup.IsOpen;
+            FlyoutBase.ShowAttachedFlyout(gearButton);
         };
 
         void ApplyAdvancedFilter()
@@ -889,13 +888,8 @@ internal class SaGridHeaderRenderer<TData>
         grid.Children.Add(gearButton);
         grid.Children.Add(textBox);
 
-        // Host popup within the same visual tree
-        var container = new Grid();
-        container.Children.Add(grid);
-        container.Children.Add(popup);
-
         return new ColumnFilterRegistration(
-            container,
+            grid,
             value =>
             {
                 string expectedText = value switch
@@ -908,7 +902,7 @@ internal class SaGridHeaderRenderer<TData>
                     textBox.Text = expectedText;
                 }
             },
-            () => textBox.IsKeyboardFocusWithin || gearButton.IsPointerOver || (popup?.IsOpen ?? false));
+            () => textBox.IsKeyboardFocusWithin || gearButton.IsPointerOver);
     }
 
     private ColumnFilterRegistration CreateBooleanFilter(
