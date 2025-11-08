@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Globalization;
 using SaGrid.Core.Models;
 using SaGrid.Core;
 
@@ -182,9 +183,30 @@ public class BaseRowModel<TData>
             var text = textState.Query?.Trim() ?? string.Empty;
             if (text.Length == 0) return true;
 
+            // Numeric comparator detection: <, >, =, <=, >=, !=
+            if (TryParseNumericExpression(text, out var op, out var rhs))
+            {
+                if (TryConvertToDouble(cellValue, out var cellNumber))
+                {
+                    var cmpOk = op switch
+                    {
+                        NumericOp.Lt => cellNumber < rhs,
+                        NumericOp.Lte => cellNumber <= rhs,
+                        NumericOp.Gt => cellNumber > rhs,
+                        NumericOp.Gte => cellNumber >= rhs,
+                        NumericOp.Eq => Math.Abs(cellNumber - rhs) < 0.000_000_1,
+                        NumericOp.Ne => Math.Abs(cellNumber - rhs) >= 0.000_000_1,
+                        _ => false
+                    };
+                    if (debug) Console.WriteLine($"[Filter]     (Numeric {op}) cell={cellNumber} rhs={rhs} => {cmpOk}");
+                    if (debug) Console.WriteLine($"[Filter]  -> Column '{filter.Id}' {(cmpOk ? "PASS" : "FAIL")} (NumericExpr)");
+                    return cmpOk;
+                }
+                // If cell is not numeric, fall back to text compare below
+            }
+
             var cellString = cellValue.ToString() ?? string.Empty;
             var comparison = textState.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-
             bool ok = textState.Mode switch
             {
                 TextFilterMode.StartsWith => cellString.StartsWith(text, comparison),
@@ -338,5 +360,74 @@ public class BaseRowModel<TData>
             };
         }
         return false;
+    }
+
+    private enum NumericOp { Lt, Lte, Gt, Gte, Eq, Ne }
+
+    private static bool TryParseNumericExpression(string input, out NumericOp op, out double value)
+    {
+        op = default;
+        value = default;
+        if (string.IsNullOrWhiteSpace(input)) return false;
+
+        var s = input.Trim();
+        ReadOnlySpan<char> span = s.AsSpan();
+        NumericOp? parsedOp = null;
+        int pos = 0;
+
+        if (span.StartsWith("<=")) { parsedOp = NumericOp.Lte; pos = 2; }
+        else if (span.StartsWith(">=")) { parsedOp = NumericOp.Gte; pos = 2; }
+        else if (span.StartsWith("!=")) { parsedOp = NumericOp.Ne; pos = 2; }
+        else if (span.StartsWith("==")) { parsedOp = NumericOp.Eq; pos = 2; }
+        else if (span.StartsWith("<")) { parsedOp = NumericOp.Lt; pos = 1; }
+        else if (span.StartsWith(">")) { parsedOp = NumericOp.Gt; pos = 1; }
+        else if (span.StartsWith("=")) { parsedOp = NumericOp.Eq; pos = 1; }
+
+        if (parsedOp == null) return false;
+
+        var rest = span[pos..].TrimStart().ToString();
+        if (double.TryParse(rest, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var rhs))
+        {
+            op = parsedOp.Value;
+            value = rhs;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryConvertToDouble(object? value, out double number)
+    {
+        number = default;
+        if (value == null) return false;
+        try
+        {
+            switch (value)
+            {
+                case double d: number = d; return true;
+                case float f: number = f; return true;
+                case decimal m: number = (double)m; return true;
+                case long l: number = l; return true;
+                case int i: number = i; return true;
+                case short s: number = s; return true;
+                case byte b: number = b; return true;
+                case ulong ul: number = ul; return true;
+                case uint ui: number = ui; return true;
+                case ushort usv: number = usv; return true;
+                case sbyte sb: number = sb; return true;
+            }
+
+            if (value is IConvertible)
+            {
+                number = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+                return true;
+            }
+        }
+        catch
+        {
+            // ignore conversion errors
+        }
+
+        return double.TryParse(value.ToString(), NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out number);
     }
 }
