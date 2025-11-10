@@ -23,6 +23,7 @@ internal sealed class SetFilterControl<TData> : UserControl
     private readonly TextBlock _summaryText;
     private readonly ComboBox _operatorBox;
     private readonly TextBox _searchBox;
+    private readonly CheckBox _fuzzySearchCheck;
     private readonly List<CheckBox> _valueCheckBoxes = new();
     private bool _suppressValueNotifications;
     private readonly Action<ModelUpdatedEventArgs> _modelUpdatedHandler;
@@ -68,6 +69,15 @@ internal sealed class SetFilterControl<TData> : UserControl
         };
         _searchBox.TextChanged += (_, _) => ApplySearch();
         header.Children.Add(_searchBox);
+
+        _fuzzySearchCheck = new CheckBox
+        {
+            Content = "Fuzzy search",
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        _fuzzySearchCheck.Checked += (_, _) => ApplySearch();
+        _fuzzySearchCheck.Unchecked += (_, _) => ApplySearch();
+        header.Children.Add(_fuzzySearchCheck);
 
         var selectAllButton = new Button
         {
@@ -186,6 +196,8 @@ internal sealed class SetFilterControl<TData> : UserControl
 
         UpdateSummary();
         _suppressValueNotifications = false;
+        // Respect current search mode/value after rebuilding the list
+        ApplySearch();
     }
 
     private void ApplySearch()
@@ -203,8 +215,44 @@ internal sealed class SetFilterControl<TData> : UserControl
         foreach (var check in _valueCheckBoxes)
         {
             var text = check.Content?.ToString() ?? string.Empty;
-            check.IsVisible = text.Contains(term, StringComparison.OrdinalIgnoreCase);
+            if (_fuzzySearchCheck.IsChecked == true)
+            {
+                check.IsVisible = FuzzyMatch(text, term);
+            }
+            else
+            {
+                check.IsVisible = text.Contains(term, StringComparison.OrdinalIgnoreCase);
+            }
         }
+    }
+
+    private static bool FuzzyMatch(string text, string pattern)
+    {
+        if (string.IsNullOrEmpty(pattern))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        // Case-insensitive, ignore whitespace in the pattern; simple subsequence match
+        var t = text.ToLowerInvariant();
+        var p = new string(pattern.ToLowerInvariant().Where(c => !char.IsWhiteSpace(c)).ToArray());
+
+        int i = 0, j = 0;
+        while (i < t.Length && j < p.Length)
+        {
+            if (t[i] == p[j])
+            {
+                j++;
+            }
+            i++;
+        }
+
+        return j == p.Length;
     }
 
     private void OnValueChanged()

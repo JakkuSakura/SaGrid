@@ -211,6 +211,7 @@ public class BaseRowModel<TData>
             {
                 TextFilterMode.StartsWith => cellString.StartsWith(text, comparison),
                 TextFilterMode.EndsWith => cellString.EndsWith(text, comparison),
+                TextFilterMode.Fuzzy => FuzzyMatch(cellString, text, textState.CaseSensitive),
                 _ => cellString.IndexOf(text, comparison) >= 0
             };
 
@@ -321,6 +322,30 @@ public class BaseRowModel<TData>
         var eq = cellValue.ToString()?.Equals(filterValue.ToString(), StringComparison.OrdinalIgnoreCase) == true;
         if (debug) Console.WriteLine($"[Filter]  -> Column '{filter.Id}' {(eq ? "PASS" : "FAIL")} (Default Equals) cell='{cellValue}' filter='{filterValue}'");
         return eq;
+    }
+
+    private static bool FuzzyMatch(string text, string pattern, bool caseSensitive)
+    {
+        if (string.IsNullOrEmpty(pattern)) return true;
+        if (string.IsNullOrEmpty(text)) return false;
+
+        var t = caseSensitive ? text : text.ToLowerInvariant();
+        var p = caseSensitive ? pattern : pattern.ToLowerInvariant();
+
+        // Ignore whitespace in the pattern for convenience
+        p = new string(p.Where(c => !char.IsWhiteSpace(c)).ToArray());
+        if (p.Length == 0) return true;
+
+        int i = 0, j = 0;
+        while (i < t.Length && j < p.Length)
+        {
+            if (t[i] == p[j])
+            {
+                j++;
+            }
+            i++;
+        }
+        return j == p.Length;
     }
 
     internal static bool EvaluateSetFilter(string cellString, SetFilterState state)

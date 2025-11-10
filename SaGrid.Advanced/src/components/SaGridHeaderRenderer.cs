@@ -781,7 +781,7 @@ internal class SaGridHeaderRenderer<TData>
         };
 
         // Map between UI values and enum
-        var modeItems = new[] { "Contains", "Starts with", "Ends with" };
+        var modeItems = new[] { "Contains", "Starts with", "Ends with", "Fuzzy" };
         var modeCombo = new ComboBox
         {
             ItemsSource = modeItems,
@@ -829,6 +829,7 @@ internal class SaGridHeaderRenderer<TData>
                 {
                     TextFilterMode.StartsWith => 1,
                     TextFilterMode.EndsWith => 2,
+                    TextFilterMode.Fuzzy => 3,
                     _ => 0
                 };
                 caseCheck.IsChecked = currentCaseSensitive;
@@ -855,6 +856,7 @@ internal class SaGridHeaderRenderer<TData>
             {
                 1 => TextFilterMode.StartsWith,
                 2 => TextFilterMode.EndsWith,
+                3 => TextFilterMode.Fuzzy,
                 _ => TextFilterMode.Contains
             };
             ApplyAdvancedFilter();

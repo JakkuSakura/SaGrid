@@ -98,7 +98,8 @@ public enum TextFilterMode
 {
     Contains,
     StartsWith,
-    EndsWith
+    EndsWith,
+    Fuzzy
 }
 
 public record TextFilterState(string Query, TextFilterMode Mode = TextFilterMode.Contains, bool CaseSensitive = false);
