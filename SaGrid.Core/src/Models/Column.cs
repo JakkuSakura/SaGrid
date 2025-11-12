@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using SaGrid.Core.Filters;
 using SaGrid.Core.Models;
 
 namespace SaGrid.Core;
@@ -181,7 +182,23 @@ public class Column<TData> : IColumn<TData>
     private object? GetFilterValue()
     {
         var filtersState = _table.State.ColumnFilters;
-        return filtersState?.FirstOrDefault(f => f.Id == Id)?.Value;
+        var raw = filtersState?.FirstOrDefault(f => f.Id == Id)?.Value;
+
+        // Unwrap well-known IModelFilter wrappers for UI/state consumers
+        if (raw is IColumnFilter<TData> modelFilter)
+        {
+            switch (modelFilter)
+            {
+                case TextColumnFilter<TData> tcf:
+                    return tcf.State;
+                case SetColumnFilter<TData> scf:
+                    return scf.State;
+                case EqualsColumnFilter<TData> ecf:
+                    return ecf.Value;
+            }
+        }
+
+        return raw;
     }
 
     private bool GetIsGrouped()

@@ -10,6 +10,22 @@ public delegate T Updater<T>(T value);
 public delegate T AccessorFn<TData, T>(TData data);
 public delegate TResult ColumnDefTemplate<TData, TValue, TResult>(ColumnDef<TData, TValue> columnDef);
 
+// Flexible filter delegates
+public delegate bool RowFilterFn<TData>(Table<TData> table, Row<TData> row);
+public delegate bool ColumnFilterFn<TData>(Table<TData> table, Row<TData> row, string columnId);
+
+// Unified filter interfaces
+public interface IModelFilter<TData>
+{
+    bool Evaluate(Table<TData> table, Row<TData> row);
+}
+
+// Column-specific filter as a special case of model filter
+public interface IColumnFilter<TData> : IModelFilter<TData>
+{
+    string ColumnId { get; }
+}
+
 public record TableOptions<TData>
 {
     public required IEnumerable<TData> Data { get; init; }
@@ -36,6 +52,9 @@ public record TableOptions<TData>
     public bool EnablePagination { get; init; } = false;
     public bool EnableVirtualization { get; init; } = false;
     public Dictionary<string, object>? Meta { get; init; }
+
+    // Optional factory to construct a global IModelFilter from arbitrary values (e.g., strings/TextFilterState)
+    public Func<Table<TData>, object?, IModelFilter<TData>?>? GlobalFilterFactory { get; init; }
 }
 
 public record TableState<TData>

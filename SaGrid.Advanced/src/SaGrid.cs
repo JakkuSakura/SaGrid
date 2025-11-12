@@ -675,9 +675,9 @@ public class SaGrid<TData> : ISaGrid<TData>, ISaGridComponentHost<TData>
 
     public void SetColumnFilter(string columnId, object? value)
     {
+        // Compare against the unwrapped, UI-facing filter value for this column
+        var currentValue = GetColumn(columnId)?.FilterValue;
         var currentFilters = State.ColumnFilters?.Filters ?? new List<ColumnFilter>();
-        var existing = currentFilters.FirstOrDefault(f => f.Id == columnId);
-        var currentValue = existing?.Value;
         var newFilters = currentFilters.Where(f => f.Id != columnId).ToList();
 
         var isEqual = FiltersEqual(currentValue, value);

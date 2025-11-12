@@ -138,14 +138,36 @@ public class BaseRowModel<TData>
 
     internal static bool PassesGlobalFilter(Table<TData> table, Row<TData> row, object filterValue)
     {
-        var filterText = filterValue?.ToString()?.Trim().ToLowerInvariant();
+        // Flexible row-level predicate
+        if (filterValue is RowFilterFn<TData> rowFn)
+        {
+            return rowFn(table, row);
+        }
+
+        // Advanced text filter (row-scoped)
+        if (filterValue is TextFilterState textState)
+        {
+            foreach (var column in table.VisibleLeafColumns)
+            {
+                var cellString = row.GetCell(column.Id).Value?.ToString() ?? string.Empty;
+                if (EvaluateTextFilter(cellString, textState))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // String contains across visible columns (legacy behavior)
+        var filterText = filterValue?.ToString()?.Trim();
         if (string.IsNullOrEmpty(filterText)) return true;
 
         foreach (var column in table.VisibleLeafColumns)
         {
             var cell = row.GetCell(column.Id);
-            var cellValue = cell.Value?.ToString()?.ToLowerInvariant();
-            if (!string.IsNullOrEmpty(cellValue) && cellValue.Contains(filterText))
+            var cellValue = cell.Value?.ToString();
+            if (!string.IsNullOrEmpty(cellValue) &&
+                cellValue.IndexOf(filterText, StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 return true;
             }
@@ -165,6 +187,12 @@ public class BaseRowModel<TData>
 
         if (filterValue == null) return true;
         if (cellValue == null) return false;
+
+        // Custom column-level predicate
+        if (filterValue is ColumnFilterFn<TData> colFn)
+        {
+            return colFn(table, row, filter.Id);
+        }
 
         if (filterValue is SetFilterState setState)
         {
@@ -206,14 +234,7 @@ public class BaseRowModel<TData>
             }
 
             var cellString = cellValue.ToString() ?? string.Empty;
-            var comparison = textState.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-            bool ok = textState.Mode switch
-            {
-                TextFilterMode.StartsWith => cellString.StartsWith(text, comparison),
-                TextFilterMode.EndsWith => cellString.EndsWith(text, comparison),
-                TextFilterMode.Fuzzy => FuzzyMatch(cellString, text, textState.CaseSensitive),
-                _ => cellString.IndexOf(text, comparison) >= 0
-            };
+            bool ok = EvaluateTextFilter(cellString, textState);
 
             if (debug) Console.WriteLine($"[Filter]     (Text {textState.Mode}, Case={(textState.CaseSensitive ? "Sensitive" : "Insensitive")}) cell='{cellString}' filter='{text}' => {ok}");
             if (debug) Console.WriteLine($"[Filter]  -> Column '{filter.Id}' {(ok ? "PASS" : "FAIL")} (TextFilterState)");
@@ -322,6 +343,19 @@ public class BaseRowModel<TData>
         var eq = cellValue.ToString()?.Equals(filterValue.ToString(), StringComparison.OrdinalIgnoreCase) == true;
         if (debug) Console.WriteLine($"[Filter]  -> Column '{filter.Id}' {(eq ? "PASS" : "FAIL")} (Default Equals) cell='{cellValue}' filter='{filterValue}'");
         return eq;
+    }
+
+    private static bool EvaluateTextFilter(string cellString, TextFilterState textState)
+    {
+        var comparison = textState.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        var text = textState.Query ?? string.Empty;
+        return textState.Mode switch
+        {
+            TextFilterMode.StartsWith => cellString.StartsWith(text, comparison),
+            TextFilterMode.EndsWith => cellString.EndsWith(text, comparison),
+            TextFilterMode.Fuzzy => FuzzyMatch(cellString, text, textState.CaseSensitive),
+            _ => cellString.IndexOf(text, comparison) >= 0
+        };
     }
 
     private static bool FuzzyMatch(string text, string pattern, bool caseSensitive)

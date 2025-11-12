@@ -1,3 +1,4 @@
+using SaGrid.Core.Filters;
 using SaGrid.Core.Models;
 
 namespace SaGrid.Core;
@@ -150,14 +151,45 @@ public static class GlobalFilterExtensions
 {
     public static void SetGlobalFilter<TData>(this Table<TData> table, object? value)
     {
-        object? normalized = value is string s && string.IsNullOrWhiteSpace(s)
-            ? null
-            : value;
+        object? normalized = value is string s && string.IsNullOrWhiteSpace(s) ? null : value;
 
-        table.SetState(state => state with
+        // Convert to IModelFilter if configured or if known value kinds
+        IModelFilter<TData>? modelFilter = null;
+        if (normalized != null)
         {
-            GlobalFilter = normalized != null ? new GlobalFilterState(normalized) : null
-        });
+            // Custom factory has highest priority
+            var factory = table.Options.GlobalFilterFactory;
+            if (factory != null)
+            {
+                modelFilter = factory(table, normalized);
+            }
+
+            // Direct pass-through
+            if (modelFilter == null && normalized is IModelFilter<TData> mf)
+            {
+                modelFilter = mf;
+            }
+
+            // Adapter from delegate
+            if (modelFilter == null && normalized is RowFilterFn<TData> pred)
+            {
+                modelFilter = new RowPredicateModelFilter<TData>(pred);
+            }
+
+            // Adapter from TextFilterState
+            if (modelFilter == null && normalized is TextFilterState tfs)
+            {
+                modelFilter = new RowTextModelFilter<TData>(tfs);
+            }
+
+            // Adapter from string
+            if (modelFilter == null && normalized is string text)
+            {
+                modelFilter = new RowTextModelFilter<TData>(new TextFilterState(text, TextFilterMode.Contains, false));
+            }
+        }
+
+        table.SetState(state => state with { GlobalFilter = modelFilter != null ? new GlobalFilterState(modelFilter) : null });
     }
 
     public static void ClearGlobalFilter<TData>(this Table<TData> table)
@@ -177,10 +209,25 @@ public static class ColumnFilterExtensions
     {
         var currentFilters = table.State.ColumnFilters ?? new ColumnFiltersState();
         var filters = currentFilters.Filters.Where(f => f.Id != columnId).ToList();
-        
+
         if (value != null)
         {
-            filters.Add(new ColumnFilter(columnId, value));
+            object wrapped = value;
+
+            // Pass-through if caller already supplies an IModelFilter
+            if (wrapped is not IModelFilter<TData>)
+            {
+                wrapped = value switch
+                {
+                    SetFilterState setState => new SetColumnFilter<TData>(columnId, setState),
+                    TextFilterState textState => new TextColumnFilter<TData>(columnId, textState),
+                    string s => new TextColumnFilter<TData>(columnId, new TextFilterState(s, TextFilterMode.Contains, false)),
+                    bool or int or double => new EqualsColumnFilter<TData>(columnId, value),
+                    _ => value
+                };
+            }
+
+            filters.Add(new ColumnFilter(columnId, wrapped));
         }
         
         table.SetState(state => state with 

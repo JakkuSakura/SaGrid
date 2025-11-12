@@ -819,8 +819,7 @@ internal class SaGridHeaderRenderer<TData>
         gearButton.Click += (_, _) =>
         {
             // Initialize UI from current filter if present
-            var currentValue = table.State.ColumnFilters?.Filters
-                .FirstOrDefault(f => f.Id == column.Id)?.Value;
+            var currentValue = column.FilterValue;
             if (currentValue is TextFilterState tfs)
             {
                 currentMode = tfs.Mode;
